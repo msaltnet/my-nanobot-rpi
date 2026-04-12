@@ -23,7 +23,7 @@
     "telegram": {
       "enabled": true,
       "token": "${TELEGRAM_BOT_TOKEN}",
-      "allowFrom": ["YOUR_TELEGRAM_USER_ID"]
+      "allowFrom": ["${TELEGRAM_USER_ID}"]
     },
     "sendProgress": false,
     "sendToolHints": false,
