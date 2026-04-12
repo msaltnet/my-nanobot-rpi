@@ -76,3 +76,36 @@ class Storage:
             return [dict(row) for row in cursor.fetchall()]
         finally:
             conn.close()
+
+    def upsert_sleep(self, date: str, bedtime: str, wakeup: str,
+                     duration_min: int, quality: str | None = None):
+        conn = self._connect()
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO sleep_log (date, bedtime, wakeup, duration_min, quality) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (date, bedtime, wakeup, duration_min, quality),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_sleep_log(self, date: str) -> dict | None:
+        conn = self._connect()
+        try:
+            cursor = conn.execute("SELECT * FROM sleep_log WHERE date = ?", (date,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def get_sleep_logs_since(self, since_date: str) -> list[dict]:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM sleep_log WHERE date >= ? ORDER BY date DESC",
+                (since_date,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
