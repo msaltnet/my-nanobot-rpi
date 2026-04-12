@@ -109,3 +109,48 @@ class Storage:
             return [dict(row) for row in cursor.fetchall()]
         finally:
             conn.close()
+
+    def insert_todo(self, content: str, due_at: str | None = None) -> int:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "INSERT INTO todos (content, due_at, status) VALUES (?, ?, 'pending')",
+                (content, due_at),
+            )
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def complete_todo(self, todo_id: int):
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE todos SET status='done', completed_at=datetime('now') WHERE id=?",
+                (todo_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_pending_todos(self) -> list[dict]:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM todos WHERE status='pending' ORDER BY due_at ASC NULLS LAST"
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def get_todos_due_before(self, before: str) -> list[dict]:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM todos WHERE status='pending' AND due_at IS NOT NULL AND due_at <= ? "
+                "ORDER BY due_at ASC",
+                (before,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
