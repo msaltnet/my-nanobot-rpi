@@ -154,3 +154,38 @@ class Storage:
             return [dict(row) for row in cursor.fetchall()]
         finally:
             conn.close()
+
+    def insert_life_log(self, raw_text: str, category: str, parsed_data: str) -> int:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "INSERT INTO life_log (raw_text, category, parsed_data) VALUES (?, ?, ?)",
+                (raw_text, category, parsed_data),
+            )
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def get_life_logs_since(self, since_date: str) -> list[dict]:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM life_log WHERE timestamp >= ? ORDER BY timestamp DESC",
+                (since_date,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def get_life_log_category_counts(self, since_date: str) -> dict[str, int]:
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "SELECT category, COUNT(*) as cnt FROM life_log "
+                "WHERE timestamp >= ? GROUP BY category",
+                (since_date,),
+            )
+            return {row["category"]: row["cnt"] for row in cursor.fetchall()}
+        finally:
+            conn.close()
