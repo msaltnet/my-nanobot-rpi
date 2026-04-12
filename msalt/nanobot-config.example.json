@@ -1,0 +1,44 @@
+{
+  "agents": {
+    "defaults": {
+      "model": "gpt-4o-mini",
+      "workspace": "~/.nanobot/workspace",
+      "maxTokens": 4096,
+      "contextWindowTokens": 16000,
+      "maxToolIterations": 50,
+      "timezone": "Asia/Seoul",
+      "dream": {
+        "intervalH": 12,
+        "maxBatchSize": 10,
+        "maxIterations": 5
+      }
+    }
+  },
+  "providers": {
+    "openai": {
+      "apiKey": "${OPENAI_API_KEY}"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": ["YOUR_TELEGRAM_USER_ID"]
+    },
+    "sendProgress": false,
+    "sendToolHints": false,
+    "sendMaxRetries": 2
+  },
+  "tools": {
+    "web": {
+      "enable": true,
+      "search": {
+        "provider": "duckduckgo"
+      }
+    },
+    "exec": {
+      "enable": true,
+      "timeout": 30
+    }
+  }
+}
