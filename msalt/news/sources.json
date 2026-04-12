@@ -1,0 +1,30 @@
+{
+  "rss": [
+    {
+      "name": "한국경제",
+      "url": "https://www.hankyung.com/feed/economy",
+      "category": "domestic"
+    },
+    {
+      "name": "매일경제",
+      "url": "https://www.mk.co.kr/rss/30100041/",
+      "category": "domestic"
+    },
+    {
+      "name": "조선비즈",
+      "url": "https://biz.chosun.com/svc/rss/www/rss.xml",
+      "category": "domestic"
+    },
+    {
+      "name": "Reuters Business",
+      "url": "https://www.reutersagency.com/feed/?best-topics=business-finance",
+      "category": "international"
+    },
+    {
+      "name": "CNBC Top News",
+      "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+      "category": "international"
+    }
+  ],
+  "youtube": []
+}
