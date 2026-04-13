@@ -62,10 +62,13 @@ msalt/
 │   ├── classifier.py         # 키워드 기반 자동 분류
 │   ├── tracker.py            # 자유 텍스트 생활 기록
 │   └── cli.py                # CLI (sleep, todo, log, summary)
-└── skills/
-    ├── news/SKILL.md          # 뉴스 대화형 스킬
-    ├── news-briefing/SKILL.md # 크론 브리핑 스킬
-    └── lifestyle/SKILL.md     # 생활 습관 스킬
+├── skills/
+│   ├── news/SKILL.md          # 뉴스 대화형 스킬
+│   ├── news-briefing/SKILL.md # 크론 브리핑 스킬
+│   └── lifestyle/SKILL.md     # 생활 습관 스킬
+└── workspace/
+    ├── SOUL.md                # 봇 페르소나 템플릿 (사전 세팅용)
+    └── USER.md                # 사용자 정보 템플릿
 ```
 
 ## 시작하기
@@ -82,7 +85,12 @@ cp .env.example .env
 # 2. nanobot config 복사 (편집 불필요 — .env에서 자동 참조)
 cp msalt/nanobot-config.example.json ~/.nanobot/config.json
 
-# 3. 설치 및 실행
+# 3. workspace 사전 세팅 (봇 페르소나 / 사용자 정보 템플릿)
+mkdir -p ~/.nanobot/workspace
+cp msalt/workspace/SOUL.md ~/.nanobot/workspace/SOUL.md
+cp msalt/workspace/USER.md ~/.nanobot/workspace/USER.md
+
+# 4. 설치 및 실행
 pip install -e .
 nanobot gateway
 ```

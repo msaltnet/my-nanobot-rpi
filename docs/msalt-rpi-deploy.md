@@ -44,25 +44,33 @@ nano /home/pi/msalt-nanobot/.env
 ```env
 OPENAI_API_KEY=sk-your-actual-key-here
 TELEGRAM_BOT_TOKEN=your-actual-bot-token-here
+TELEGRAM_USER_ID=your-telegram-user-id
+YOUTUBE_API_KEY=your-youtube-api-key-here
 ```
 
 ### config.json 설정
 
-nanobot 설정 파일을 생성합니다:
+nanobot 설정 파일은 `.env` 값을 자동 참조하므로 편집이 불필요합니다:
 
 ```bash
 mkdir -p ~/.nanobot
 cp msalt/nanobot-config.example.json ~/.nanobot/config.json
-nano ~/.nanobot/config.json
 ```
 
-예시 설정:
+### workspace 사전 세팅
 
-```json
-{
-  "telegram_bot_token": "your-bot-token",
-  "allowed_users": ["your_telegram_username"]
-}
+봇 페르소나(`SOUL.md`)와 사용자 정보(`USER.md`) 템플릿을 workspace에 복사합니다:
+
+```bash
+mkdir -p ~/.nanobot/workspace
+cp msalt/workspace/SOUL.md ~/.nanobot/workspace/SOUL.md
+cp msalt/workspace/USER.md ~/.nanobot/workspace/USER.md
+```
+
+이 파일들은 첫 실행 시 시스템 프롬프트에 주입되며, 이후 대화를 통해 `dream` 시스템이 자동으로 업데이트합니다. 페르소나를 커스터마이즈하려면 복사 후 편집하세요:
+
+```bash
+nano ~/.nanobot/workspace/SOUL.md
 ```
 
 ## systemd 서비스 관리
