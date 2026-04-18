@@ -14,7 +14,7 @@ def db(tmp_path):
     return storage
 
 
-def test_initialize_creates_tables(db):
+def test_initialize_creates_news_articles_table(db):
     conn = sqlite3.connect(db.db_path)
     cursor = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -22,9 +22,6 @@ def test_initialize_creates_tables(db):
     tables = [row[0] for row in cursor.fetchall()]
     conn.close()
     assert "news_articles" in tables
-    assert "sleep_log" in tables
-    assert "todos" in tables
-    assert "life_log" in tables
 
 
 def test_insert_and_get_article(db):
@@ -52,3 +49,13 @@ def test_get_articles_since_filters_by_date(db):
     db.insert_article("src", "오래된", "https://old.com", "old", "domestic")
     articles = db.get_articles_since("2099-01-01")
     assert len(articles) == 0
+
+
+def test_storage_does_not_expose_lifestyle_methods():
+    from msalt.storage import Storage
+    legacy = ["upsert_sleep", "get_sleep_log", "get_sleep_logs_since",
+              "insert_todo", "complete_todo", "get_pending_todos",
+              "get_todos_due_before", "insert_life_log",
+              "get_life_logs_since", "get_life_log_category_counts"]
+    for name in legacy:
+        assert not hasattr(Storage, name), f"{name} should be removed"
