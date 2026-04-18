@@ -42,4 +42,4 @@
 - 라즈베리파이 3B+ (1GB RAM) — 무거운 작업은 피한다.
 - SQLite DB 경로: `~/.nanobot/workspace/msalt.db`
 - 뉴스 수집 주기: 아침·저녁 브리핑 직전 크론으로 트리거
-- LLM: OpenAI gpt-4o-mini (응답 간결성 중요)
+- LLM: OpenAI gpt-5-mini (응답 간결성 중요)
