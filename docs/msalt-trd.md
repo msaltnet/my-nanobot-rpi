@@ -155,15 +155,20 @@ RSS 피드 5개(한경·매경·조선비즈·Reuters·CNBC)와 YouTube 채널 2
 자유 텍스트를 받아 `classifier.classify_text`로 카테고리를 결정한 뒤 `Storage.insert_life_log`로 저장한다. 주간 요약은 카테고리별 빈도수와 최근 기록 샘플을 묶어 사람이 읽을 문자열로 포맷.
 
 **`cli.py` — main**
+> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
 `python -m msalt.lifestyle <command>` 엔트리포인트. 7개 서브커맨드: `sleep-record`, `sleep-stats`, `todo-add`, `todo-list`, `todo-done`, `log`, `summary`.
 
 ### 3.4 스킬 레이어 (L3: `msalt/skills/`)
+
+> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
 
 스킬 파일은 nanobot의 `SKILL.md` 규약(YAML frontmatter + Markdown 본문)을 따른다. 본문은 LLM에게 "이 도구를 언제·어떻게 호출할지"를 설명하고, 실행은 내부적으로 `python -m msalt.news` 또는 `python -m msalt.lifestyle` CLI를 호출한다.
 
 **`news/SKILL.md`** — 대화형 뉴스 스킬. 사용자가 "최근 뉴스 보여줘", "삼성전자 관련 기사 찾아줘" 같은 자유 질의를 던졌을 때 LLM이 이 스킬을 호출.
 
 **`news-briefing/SKILL.md`** — 크론 스케줄 전용 스킬. `metadata: {"always": false}`로 일반 대화에서는 노출되지 않고, 07:00/19:00 cron 트리거에서만 호출된다.
+
+> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
 
 **`lifestyle/SKILL.md`** — 수면·할일·자유 기록 통합 스킬. 사용자 의도에 따라 적절한 lifestyle 서브커맨드로 라우팅.
 
@@ -282,6 +287,8 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 ## 7. 테스트 전략
 
 ### 구성
+
+> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
 
 - **프레임워크**: pytest
 - **위치**: `tests/msalt/{news,lifestyle}/test_*.py`
