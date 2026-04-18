@@ -1,0 +1,13 @@
+[Unit]
+Description=msalt tracking dispatcher (one-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/msalt-nanobot
+EnvironmentFile=/home/pi/msalt-nanobot/.env
+ExecStart=/home/pi/msalt-nanobot/.venv/bin/python -m msalt.tracking dispatch
+StandardOutput=journal
+StandardError=journal

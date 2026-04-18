@@ -1,0 +1,10 @@
+[Unit]
+Description=Run msalt tracking dispatcher every 30 minutes
+
+[Timer]
+OnCalendar=*:00,30
+Persistent=true
+Unit=msalt-tracking-dispatch.service
+
+[Install]
+WantedBy=timers.target
