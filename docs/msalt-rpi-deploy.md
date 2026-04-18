@@ -119,6 +119,29 @@ sudo systemctl enable msalt-nanobot
 sudo systemctl disable msalt-nanobot
 ```
 
+## tracking dispatcher 타이머
+
+`setup-rpi.sh`가 30분 주기 추적 디스패처 타이머(`msalt-tracking-dispatch.timer`)도 함께 등록·활성화합니다. 시각이 도래한 항목과 누락 항목을 텔레그램으로 자동 질문합니다.
+
+### 타이머 상태 확인
+
+```bash
+sudo systemctl status msalt-tracking-dispatch.timer
+systemctl list-timers msalt-tracking-dispatch.timer
+```
+
+### 직전 실행 로그 확인
+
+```bash
+journalctl -u msalt-tracking-dispatch.service -n 20
+```
+
+### 수동 실행 (디버깅)
+
+```bash
+sudo systemctl start msalt-tracking-dispatch.service
+```
+
 ## 메모리 모니터링
 
 Raspberry Pi 3B+는 RAM이 1GB이므로 메모리 사용량을 주기적으로 확인합니다.

@@ -1,5 +1,7 @@
 # msalt-nanobot Implementation Plan
 
+> **2026-04-14 업데이트**: 본 plan의 Phase 3 (생활 습관) 태스크는 폐기되고 [../plans/2026-04-14-msalt-tracking-redesign.md](2026-04-14-msalt-tracking-redesign.md) plan으로 대체되었다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** nanobot 포크 위에 경제 뉴스 비서 + 생활 습관 관리 기능을 구축하여, 라즈베리파이 3B+에서 텔레그램으로 서비스한다.

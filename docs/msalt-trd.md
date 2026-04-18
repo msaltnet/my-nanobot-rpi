@@ -33,7 +33,7 @@ msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워
    │                    │ skill invocation               │
    │   ┌────────────────▼───────────────────────────┐   │
    │   │              msalt 모듈                    │   │
-   │   │  news / lifestyle / storage / config       │   │
+   │   │  news / tracking / storage / config        │   │
    │   └─┬──────────┬──────────┬──────────────┬─────┘   │
    │     │          │          │              │         │
    │     ▼          ▼          ▼              ▼         │
@@ -59,7 +59,7 @@ msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워
 │  L3. 스킬 (msalt/skills/*/SKILL.md)                 │
 │       대화형 진입점 + 크론 진입점. 얇은 라우팅 레이어│
 ├─────────────────────────────────────────────────────┤
-│  L2. 도메인 모듈 (msalt/news, msalt/lifestyle)     │
+│  L2. 도메인 모듈 (msalt/news, msalt/tracking)      │
 │       비즈니스 로직: 수집·요약·분류·집계           │
 ├─────────────────────────────────────────────────────┤
 │  L1. 인프라 (msalt/storage.py, msalt/config.py)    │
@@ -91,17 +91,17 @@ msalt/
 │   ├── cli.py             # python -m msalt.news 엔트리포인트
 │   ├── sources.json       # RSS/YouTube 소스 목록
 │   └── __main__.py
-├── lifestyle/
-│   ├── sleep.py           # SleepTracker
-│   ├── todo.py            # TodoManager
-│   ├── classifier.py      # classify_text() 키워드 기반
-│   ├── tracker.py         # LifeTracker
-│   ├── cli.py             # python -m msalt.lifestyle 엔트리포인트
+├── tracking/
+│   ├── items.py           # TrackedItemManager
+│   ├── records.py         # RecordManager
+│   ├── parser.py          # NaturalLanguageParser (LLM)
+│   ├── dispatcher.py      # 30분 디스패처
+│   ├── cli.py             # python -m msalt.tracking 엔트리포인트
 │   └── __main__.py
 ├── skills/
 │   ├── news/SKILL.md
 │   ├── news-briefing/SKILL.md
-│   └── lifestyle/SKILL.md
+│   └── tracking/SKILL.md
 ├── workspace/
 │   ├── SOUL.md            # 봇 페르소나 템플릿
 │   └── USER.md            # 사용자 정보 템플릿
@@ -118,7 +118,7 @@ msalt/
 모든 msalt 모듈이 공유하는 설정값을 단일 데이터클래스로 보관한다. 타임존(`Asia/Seoul`), SQLite 경로(`~/.nanobot/workspace/msalt.db`), 브리핑 시각(07:00, 19:00) 등을 노출한다. 환경별 분기는 없다 — 1인용·단일 환경 가정.
 
 **`msalt/storage.py` — Storage**
-SQLite 4개 테이블에 대한 CRUD를 담당한다. 모든 도메인 모듈은 이 클래스만을 통해 DB에 접근한다. 트랜잭션·커넥션 관리·`initialize()`(테이블 생성) 책임. 비즈니스 로직(분류·요약·집계)은 일절 포함하지 않는 순수 I/O 레이어.
+SQLite 3개 테이블(`news_articles`, `tracked_items`, `records`)에 대한 CRUD를 담당한다. 모든 도메인 모듈은 이 클래스만을 통해 DB에 접근한다. 트랜잭션·커넥션 관리·`initialize()`(테이블 생성) 책임. 비즈니스 로직(통계·요약·디스패처)은 일절 포함하지 않는 순수 I/O 레이어.
 
 ### 3.2 뉴스 도메인 (L2: `msalt/news/`)
 
@@ -140,37 +140,32 @@ DB에 누적된 최근 기사를 읽어 OpenAI GPT로 요약 브리핑 텍스트
 **`sources.json`**
 RSS 피드 5개(한경·매경·조선비즈·Reuters·CNBC)와 YouTube 채널 2개(삼프로TV·슈카월드)의 ID/URL 정의. 코드 변경 없이 소스 추가·제거 가능.
 
-### 3.3 라이프스타일 도메인 (L2: `msalt/lifestyle/`)
+### 3.3 트래킹 도메인 (L2: `msalt/tracking/`)
 
-**`sleep.py` — SleepTracker**
-"어제 23시에 자서 7시에 일어났어" 같은 자연어를 정규식·시간 표현 휴리스틱으로 파싱해 `(date, bedtime, wakeup, duration_min)` 튜플로 변환한다. `Storage.upsert_sleep`으로 저장(같은 날짜는 덮어씀). 통계는 주간/월간 평균 수면시간·취침시각 분산을 계산해 사람이 읽을 문자열로 포맷.
+**`items.py` — TrackedItemManager**
+추적 항목 CRUD와 검증, 빈 DB일 때 기본 시드(수면/음주/영어공부) 삽입을 책임진다. schema(freetext/duration/quantity/boolean)·schedule_time(HH:MM)·unit 일관성 검사도 여기서.
 
-**`todo.py` — TodoManager**
-할일 추가, 완료 처리, 미완료 목록 조회, 기한 임박 항목 조회. 자연어 기한 파싱(예: "내일", "다음주 월요일")은 기본 케이스만 지원 — 모호하면 사용자에게 다시 묻는 정책.
+**`records.py` — RecordManager**
+기록 upsert(같은 날짜 덮어쓰기)와 schema별 통계 포맷팅. duration → 평균 분, quantity → 합계·평균, boolean → 수행률(%), freetext → 최근 N건 나열.
 
-**`classifier.py` — classify_text**
-순수 함수. 입력 텍스트에 대해 키워드 사전 매칭으로 카테고리(`exercise`/`food`/`health`/`mood`/`sleep`/`other`)를 반환한다. LLM 호출 없음 — 즉답성·비용 절감 목적. 키워드 사전은 모듈 내 상수로 정의돼 있어 추가는 코드 수정 필요.
+**`parser.py` — NaturalLanguageParser**
+gpt-5-mini 단발 호출로 두 가지를 처리: (1) 기록 입력 자연어 → ParsedRecord(item·날짜·값·신뢰도), (2) 항목 추가 자연어 → ParsedItemIntent(name·schema·unit·schedule_time). LLM 응답 파싱 실패 시 기록은 confidence=0 반환, 항목 의도는 ValueError.
 
-**`tracker.py` — LifeTracker**
-자유 텍스트를 받아 `classifier.classify_text`로 카테고리를 결정한 뒤 `Storage.insert_life_log`로 저장한다. 주간 요약은 카테고리별 빈도수와 최근 기록 샘플을 묶어 사람이 읽을 문자열로 포맷.
+**`dispatcher.py` — Dispatcher**
+30분 윈도우 단위로 도는 검출 로직. (1) 직전 30분 슬롯에 schedule_time이 든 항목 → 질문 메시지, (2) 슬롯이 이미 지났는데 오늘 records가 없는 항목 → 누락 알림. 같은 항목이 양쪽에 잡히면 (1) 우선. Telegram 발송 함수는 의존성 주입.
 
 **`cli.py` — main**
-> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
-`python -m msalt.lifestyle <command>` 엔트리포인트. 7개 서브커맨드: `sleep-record`, `sleep-stats`, `todo-add`, `todo-list`, `todo-done`, `log`, `summary`.
+`python -m msalt.tracking <cmd>` 엔트리. `dispatch`(systemd timer), `add`/`delete`/`list`/`record`/`summary`(디버깅·시드).
 
 ### 3.4 스킬 레이어 (L3: `msalt/skills/`)
 
-> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
-
-스킬 파일은 nanobot의 `SKILL.md` 규약(YAML frontmatter + Markdown 본문)을 따른다. 본문은 LLM에게 "이 도구를 언제·어떻게 호출할지"를 설명하고, 실행은 내부적으로 `python -m msalt.news` 또는 `python -m msalt.lifestyle` CLI를 호출한다.
+스킬 파일은 nanobot의 `SKILL.md` 규약(YAML frontmatter + Markdown 본문)을 따른다. 본문은 LLM에게 "이 도구를 언제·어떻게 호출할지"를 설명하고, 실행은 내부적으로 `python -m msalt.news` 또는 `python -m msalt.tracking` CLI를 호출한다.
 
 **`news/SKILL.md`** — 대화형 뉴스 스킬. 사용자가 "최근 뉴스 보여줘", "삼성전자 관련 기사 찾아줘" 같은 자유 질의를 던졌을 때 LLM이 이 스킬을 호출.
 
 **`news-briefing/SKILL.md`** — 크론 스케줄 전용 스킬. `metadata: {"always": false}`로 일반 대화에서는 노출되지 않고, 07:00/19:00 cron 트리거에서만 호출된다.
 
-> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
-
-**`lifestyle/SKILL.md`** — 수면·할일·자유 기록 통합 스킬. 사용자 의도에 따라 적절한 lifestyle 서브커맨드로 라우팅.
+**`tracking/SKILL.md`** — 추적 항목 통합 스킬. 사용자 의도(기록·항목 추가/삭제·조회·통계)에 따라 적절한 tracking 서브커맨드로 라우팅.
 
 ### 3.5 워크스페이스 템플릿 (`msalt/workspace/`)
 
@@ -180,7 +175,7 @@ RSS 피드 5개(한경·매경·조선비즈·Reuters·CNBC)와 YouTube 채널 2
 
 ## 4. 데이터 모델
 
-SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 4개 테이블.
+SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 3개 테이블.
 
 ### `news_articles` — 수집된 뉴스/영상 원본
 
@@ -194,35 +189,31 @@ SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 4개 테이블.
 | `category` | TEXT | `domestic`/`global`/`youtube` |
 | `collected_at` | TEXT | 수집 시각 (`datetime('now')`) |
 
-### `sleep_log` — 수면 기록 (날짜별 1건)
-
-| 컬럼 | 타입 | 용도 |
-|------|------|------|
-| `date` | TEXT PK | `YYYY-MM-DD` — 같은 날짜 재기록 시 덮어씀 |
-| `bedtime` | TEXT | 취침 시각 (`HH:MM`) |
-| `wakeup` | TEXT | 기상 시각 (`HH:MM`) |
-| `duration_min` | INTEGER | 수면 시간 (분) |
-| `quality` | TEXT | 주관 평가 (옵션, 예: `good`/`bad`) |
-
-### `todos` — 할일
+### `tracked_items` — 사용자 정의 추적 항목
 
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
 | `id` | INTEGER PK | 자동 증가 |
-| `content` | TEXT | 할일 내용 |
-| `due_at` | TEXT | 기한 (ISO8601, nullable) |
-| `completed_at` | TEXT | 완료 시각 (nullable) |
-| `status` | TEXT | `pending`/`done` (기본 `pending`) |
+| `name` | TEXT UNIQUE | 항목명 (예: `수면`, `음주`, `영어공부`) |
+| `schema` | TEXT | `freetext` / `duration` / `quantity` / `boolean` |
+| `unit` | TEXT | quantity일 때 단위 (예: `잔`), 그 외 NULL |
+| `schedule_time` | TEXT | 능동 질문 시각 (`HH:MM`) |
+| `frequency` | TEXT | 기본 `daily` (현재 daily만 사용) |
+| `created_at` | TEXT | 등록 시각 |
 
-### `life_log` — 자유 텍스트 생활 기록
+### `records` — 항목별 기록
 
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
 | `id` | INTEGER PK | 자동 증가 |
-| `timestamp` | TEXT | 기록 시각 |
-| `raw_text` | TEXT | 사용자 원본 입력 |
-| `category` | TEXT | classifier 결과 (`exercise`/`food`/`health`/`mood`/`sleep`/`other`) |
-| `parsed_data` | TEXT | 추후 구조화 데이터(JSON) — 현재는 NULL |
+| `item_id` | INTEGER FK → tracked_items.id ON DELETE CASCADE | 항목 참조 |
+| `recorded_for` | TEXT | 사용자 기준 날짜 (`YYYY-MM-DD`) |
+| `recorded_at` | TEXT | 시스템 기록 시각 (`datetime('now')`) |
+| `value_text` | TEXT | freetext 값 |
+| `value_num` | REAL | duration(분), quantity(양) 값 |
+| `value_bool` | INTEGER | boolean 값 (0/1) |
+| `raw_input` | TEXT | 사용자 원본 입력 (감사용) |
+| UNIQUE `(item_id, recorded_for)` | | 같은 날짜 재입력 시 덮어쓰기 |
 
 ## 5. 외부 의존성
 
@@ -234,7 +225,7 @@ SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 4개 테이블.
 | **YouTube Data API v3** | 채널 최신 영상 조회 | `youtube.py` | `YOUTUBE_API_KEY` |
 | **RSS 피드** (5개) | 한국·미국 뉴스 수집 | `rss.py` | 없음 (공개) |
 | **feedparser** | RSS XML 파싱 | `rss.py` | — |
-| **httpx** | YouTube API HTTP 호출 | `youtube.py` | — |
+| **httpx** | YouTube API HTTP 호출 + tracking dispatcher의 Telegram 발송 | `youtube.py`, `tracking/cli.py` | — |
 | **python-telegram-bot** | Telegram 통신 (nanobot 내부) | nanobot | — |
 | **sqlite3** | DB I/O | `storage.py` | — (Python 표준) |
 
@@ -255,6 +246,8 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
         ├── Agent loop (gpt-5-mini)
         ├── Memory & Dream (12h cycle)
         └── msalt 도메인 모듈 (skill 호출 시 활성화)
+        ├── (외부) systemd timer: msalt-tracking-dispatch.timer (30min)
+        │       └── python -m msalt.tracking dispatch → Telegram 직접 발송
 
 파일 시스템:
 ~/.nanobot/
@@ -265,7 +258,7 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
     ├── memory/
     │   ├── MEMORY.md    # dream 자동 관리 장기 기억
     │   └── history.jsonl
-    └── msalt.db         # SQLite (뉴스/수면/할일/생활기록)
+    └── msalt.db         # SQLite (뉴스 + 추적 항목/기록)
 ```
 
 ### 시작 절차
@@ -288,13 +281,11 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 
 ### 구성
 
-> NOTE: lifestyle 모듈은 제거됨. tracking으로 대체 예정 (2026-04-14 spec 참조).
-
 - **프레임워크**: pytest
-- **위치**: `tests/msalt/{news,lifestyle}/test_*.py`
-- **import 모드**: `--import-mode=importlib` — `news/cli.py`와 `lifestyle/cli.py`의 basename 충돌 회피
+- **위치**: `tests/msalt/{news,tracking}/test_*.py`
+- **import 모드**: `--import-mode=importlib` — `news/cli.py`와 `tracking/cli.py`의 basename 충돌 회피
 - **`__init__.py` 정책**: 테스트 디렉토리에는 두지 않음 (프로젝트 컨벤션)
-- **현재 테스트 수**: 38개 (전 모듈 통과)
+- **현재 테스트 수**: 69개 (전 모듈 통과)
 
 ### 모킹 정책
 
@@ -304,10 +295,10 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 
 ### 커버리지 우선순위
 
-1. `classifier.py` — 키워드 분류 정확도 (분류 실패 시 다운스트림 영향 큼)
-2. `storage.py` — DB 스키마·UNIQUE 제약·upsert 동작
-3. `briefing.py` — dedup 로직, 카테고리 그룹핑
-4. `sleep.py` — 자연어 시간 파싱 (다양한 표현 케이스)
+1. `tracking/parser.py` — LLM 응답 파싱 견고성 (실패 시 confidence=0)
+2. `storage.py` — DB 스키마·UNIQUE 제약·CASCADE·upsert 동작
+3. `tracking/dispatcher.py` — 30분 윈도우 경계, scheduled vs missed 우선순위
+4. `briefing.py` — dedup 로직, 카테고리 그룹핑
 5. CLI 엔트리포인트 — argparse 인자 처리
 
 ---
