@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Literal
 from zoneinfo import ZoneInfo
 
@@ -12,6 +12,7 @@ from msalt.tracking.records import RecordManager
 
 KST = ZoneInfo("Asia/Seoul")
 WINDOW_MINUTES = 30
+RECENT_HOURS = 24
 
 
 @dataclass
@@ -63,6 +64,10 @@ class Dispatcher:
         # 윈도우: [now - WINDOW, now]
         window_start = now - timedelta(minutes=WINDOW_MINUTES)
         today_str = now.date().isoformat()
+        # recorded_at은 sqlite datetime('now') = UTC. 24h 이전 시점도 UTC ISO로.
+        recent_since_utc = (
+            now.astimezone(timezone.utc) - timedelta(hours=RECENT_HOURS)
+        ).strftime("%Y-%m-%d %H:%M:%S")
 
         scheduled: list[DispatchMessage] = []
         scheduled_names: set[str] = set()
@@ -84,7 +89,7 @@ class Dispatcher:
             slot_today = now.replace(hour=h, minute=m, second=0, microsecond=0)
             if slot_today > now:
                 continue  # 오늘 슬롯이 아직 안 옴
-            if self.records.storage.record_exists(it["id"], today_str):
+            if self.records.storage.has_record_since(it["id"], recent_since_utc):
                 continue
             missed.append(DispatchMessage(
                 kind="missed", item_name=it["name"],

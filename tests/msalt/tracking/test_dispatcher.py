@@ -67,6 +67,18 @@ def test_recorded_item_no_missed_alert(setup):
     assert msgs == []
 
 
+def test_overnight_recorded_for_yesterday_skips_missed(setup):
+    """오버나잇 항목(수면 08:00)을 오늘 아침에 어제 날짜로 기록해도
+    오늘의 미기록 알림은 더 이상 뜨지 않아야 한다 (최근 24h 내 입력)."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "08:00")
+    # 어제 날짜로 기록 (recorded_at은 자동으로 지금 시각 = 2026-04-14 근방)
+    records.upsert("수면", "2026-04-13", value_num=480, raw_input="8h")
+    d = Dispatcher(items, records, telegram_send=MagicMock())
+    msgs = d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
+    assert msgs == []
+
+
 def test_scheduled_takes_priority_over_missed(setup):
     """같은 회차에 scheduled로 잡히면 missed에서 제외."""
     _, items, records = setup

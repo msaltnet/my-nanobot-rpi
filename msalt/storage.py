@@ -170,3 +170,14 @@ class Storage:
         finally:
             conn.close()
 
+    def has_record_since(self, item_id: int, since_iso: str) -> bool:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM records WHERE item_id = ? AND recorded_at >= ?",
+                (item_id, since_iso),
+            ).fetchone()
+            return row is not None
+        finally:
+            conn.close()
+

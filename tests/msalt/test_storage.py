@@ -149,3 +149,20 @@ def test_record_exists_for_date(storage):
     storage.upsert_record(item["id"], "2026-04-13", value_num=480,
                           raw_input="8h")
     assert storage.record_exists(item["id"], "2026-04-13") is True
+
+
+def test_has_record_since_uses_recorded_at(storage):
+    """recorded_at(시스템 기록 시각) 기준 since 이후 record가 있으면 True."""
+    storage.insert_tracked_item("수면", "duration", None, "08:00")
+    item = storage.get_tracked_item_by_name("수면")
+
+    # 빈 상태
+    assert storage.has_record_since(item["id"], "2099-01-01T00:00:00") is False
+
+    # recorded_for가 어제여도 recorded_at이 지금이면 잡혀야 함 (오버나잇 시나리오)
+    storage.upsert_record(item["id"], "2026-04-13", value_num=480,
+                          raw_input="8h")
+    assert storage.has_record_since(item["id"], "2020-01-01T00:00:00") is True
+
+    # 미래 시점 since는 False
+    assert storage.has_record_since(item["id"], "2099-01-01T00:00:00") is False
