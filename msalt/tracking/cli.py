@@ -76,6 +76,7 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
     storage = Storage(db_path)
     storage.initialize()
     items = TrackedItemManager(storage)
+    items.seed_defaults()
     records = RecordManager(storage, items)
 
     if args.cmd == "add":

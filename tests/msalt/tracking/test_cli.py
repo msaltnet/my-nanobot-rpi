@@ -15,14 +15,14 @@ def db_path(tmp_path):
 
 
 def test_add_command(db_path, capsys):
-    rc = run_command(["add", "수면", "duration", "--time", "08:00"],
+    rc = run_command(["add", "독서", "duration", "--time", "22:00"],
                      db_path=db_path)
     assert rc == 0
     out = capsys.readouterr().out
-    assert "수면" in out
+    assert "독서" in out
     s = Storage(db_path)
     items = TrackedItemManager(s)
-    assert items.get("수면") is not None
+    assert items.get("독서") is not None
 
 
 def test_add_command_quantity_requires_unit(db_path, capsys):
@@ -81,3 +81,24 @@ def test_dispatch_command_invokes_dispatcher(db_path, capsys, monkeypatch):
                      db_path=db_path)
     assert rc == 0
     assert any("수면" in m for m in sent)
+
+
+def test_first_run_seeds_defaults(tmp_path, capsys):
+    db = tmp_path / "fresh.db"
+    rc = run_command(["list"], db_path=str(db))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "수면" in out
+    assert "음주" in out
+    assert "영어공부" in out
+
+
+def test_seed_only_on_empty_db(tmp_path, capsys):
+    db = tmp_path / "fresh.db"
+    run_command(["list"], db_path=str(db))   # seeds
+    run_command(["delete", "수면"], db_path=str(db))
+    capsys.readouterr()
+    rc = run_command(["list"], db_path=str(db))
+    out = capsys.readouterr().out
+    assert "수면" not in out
+    assert "음주" in out  # 다른 시드는 그대로
