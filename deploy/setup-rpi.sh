@@ -39,8 +39,16 @@ sudo cp deploy/msalt-nanobot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable msalt-nanobot
 
+# 6. tracking dispatcher timer 등록 (30분 주기)
+echo "Installing tracking dispatcher timer..."
+sudo cp deploy/msalt-tracking-dispatch.service /etc/systemd/system/
+sudo cp deploy/msalt-tracking-dispatch.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now msalt-tracking-dispatch.timer
+
 echo "=== Setup complete! ==="
 echo "1. Edit .env with your API keys"
 echo "2. Edit ~/.nanobot/config.json (see msalt/nanobot-config.example.json)"
 echo "3. Start: sudo systemctl start msalt-nanobot"
 echo "4. Logs: journalctl -u msalt-nanobot -f"
+echo "5. Tracking timer: systemctl list-timers msalt-tracking-dispatch.timer"
