@@ -1,8 +1,15 @@
 from unittest.mock import patch, MagicMock
 
-import pytest
+import httpx
 
 from msalt.news.rss import RssCollector
+
+
+def _mock_response(body: bytes = b"<rss/>") -> MagicMock:
+    resp = MagicMock()
+    resp.content = body
+    resp.raise_for_status = MagicMock()
+    return resp
 
 
 MOCK_FEED = MagicMock()
@@ -27,8 +34,9 @@ MOCK_FEED.entries = [
 ]
 
 
+@patch("msalt.news.rss.httpx.get", return_value=_mock_response())
 @patch("msalt.news.rss.feedparser.parse", return_value=MOCK_FEED)
-def test_collect_from_source(mock_parse):
+def test_collect_from_source(mock_parse, mock_get):
     collector = RssCollector()
     source = {"name": "테스트", "url": "https://example.com/feed", "category": "domestic"}
     articles = collector.collect_from_source(source)
@@ -39,8 +47,9 @@ def test_collect_from_source(mock_parse):
     assert articles[0]["category"] == "domestic"
 
 
+@patch("msalt.news.rss.httpx.get", return_value=_mock_response())
 @patch("msalt.news.rss.feedparser.parse")
-def test_collect_from_source_handles_bozo(mock_parse):
+def test_collect_from_source_handles_bozo(mock_parse, mock_get):
     bad_feed = MagicMock()
     bad_feed.bozo = True
     bad_feed.entries = []
@@ -49,6 +58,63 @@ def test_collect_from_source_handles_bozo(mock_parse):
     source = {"name": "Bad", "url": "https://bad.com/feed", "category": "domestic"}
     articles = collector.collect_from_source(source)
     assert articles == []
+
+
+@patch("msalt.news.rss.httpx.get")
+def test_collect_from_source_handles_http_error(mock_get):
+    mock_get.side_effect = httpx.ConnectError("boom")
+    collector = RssCollector()
+    source = {"name": "Dead", "url": "https://dead.com/feed", "category": "domestic"}
+    articles = collector.collect_from_source(source)
+    assert articles == []
+
+
+def _entry(title: str, link: str) -> MagicMock:
+    e = MagicMock(
+        title=title,
+        link=link,
+        get=lambda key, default="": {"summary": "", "published": ""}.get(key, default),
+    )
+    return e
+
+
+@patch("msalt.news.rss.httpx.get", return_value=_mock_response())
+@patch("msalt.news.rss.feedparser.parse")
+def test_collect_from_source_applies_limit(mock_parse, mock_get):
+    feed = MagicMock()
+    feed.bozo = False
+    feed.entries = [_entry(f"post {i}", f"https://r/{i}") for i in range(5)]
+    mock_parse.return_value = feed
+    collector = RssCollector()
+    source = {"name": "r/test", "url": "https://r/feed", "category": "reddit", "limit": 2}
+    articles = collector.collect_from_source(source)
+    assert len(articles) == 2
+    assert articles[0]["title"] == "post 0"
+    assert articles[1]["title"] == "post 1"
+
+
+@patch("msalt.news.rss.httpx.get", return_value=_mock_response())
+@patch("msalt.news.rss.feedparser.parse")
+def test_collect_from_source_skips_sticky_titles(mock_parse, mock_get):
+    feed = MagicMock()
+    feed.bozo = False
+    feed.entries = [
+        _entry("Daily Discussion Thread", "https://r/1"),
+        _entry("Fed cuts rates", "https://r/2"),
+        _entry("Weekly earnings megathread", "https://r/3"),
+        _entry("Tesla earnings beat", "https://r/4"),
+    ]
+    mock_parse.return_value = feed
+    collector = RssCollector()
+    source = {
+        "name": "r/test",
+        "url": "https://r/feed",
+        "category": "reddit",
+        "skip_title_patterns": ["Daily", "Weekly", "Megathread"],
+    }
+    articles = collector.collect_from_source(source)
+    titles = [a["title"] for a in articles]
+    assert titles == ["Fed cuts rates", "Tesla earnings beat"]
 
 
 def test_load_sources(tmp_path):

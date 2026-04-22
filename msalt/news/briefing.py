@@ -33,6 +33,8 @@ class BriefingGenerator:
 
         domestic = [a for a in articles if a["category"] == "domestic"]
         international = [a for a in articles if a["category"] == "international"]
+        policy = [a for a in articles if a["category"] == "policy"]
+        reddit = [a for a in articles if a["category"] == "reddit"]
 
         lines = [f"{label} 경제 브리핑 ({today})", ""]
 
@@ -52,6 +54,22 @@ class BriefingGenerator:
                 if a.get("summary"):
                     lines.append(f"   {a['summary'][:200]}")
                 lines.append(f"   원문: {a['url']}")
+                lines.append("")
+
+        if policy:
+            lines.append("[정책·지표]")
+            for i, a in enumerate(policy, 1):
+                lines.append(f"{i}. [{a['source']}] {a['title']}")
+                if a.get("summary"):
+                    lines.append(f"   {a['summary'][:200]}")
+                lines.append(f"   원문: {a['url']}")
+                lines.append("")
+
+        if reddit:
+            lines.append("[커뮤니티]")
+            for i, a in enumerate(reddit, 1):
+                lines.append(f"{i}. [{a['source']}] {a['title']}")
+                lines.append(f"   링크: {a['url']}")
                 lines.append("")
 
         return "\n".join(lines)

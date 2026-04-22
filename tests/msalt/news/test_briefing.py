@@ -25,6 +25,33 @@ def test_format_briefing(mock_storage):
     assert "Fed holds rates" in text
 
 
+def test_format_briefing_includes_reddit_section():
+    from unittest.mock import MagicMock
+    storage = MagicMock()
+    storage.get_articles_since.return_value = [
+        {"source": "한경", "title": "국내 이슈", "url": "https://hk.com/1", "summary": "요약", "category": "domestic", "collected_at": "2026-04-21 07:00:00"},
+        {"source": "r/economics", "title": "Fed pivot", "url": "https://reddit.com/r/economics/1", "summary": "", "category": "reddit", "collected_at": "2026-04-21 07:00:00"},
+    ]
+    gen = BriefingGenerator(storage=storage)
+    text = gen.format_briefing("morning")
+    assert "[커뮤니티]" in text
+    assert "r/economics" in text
+    assert "Fed pivot" in text
+
+
+def test_format_briefing_includes_policy_section():
+    from unittest.mock import MagicMock
+    storage = MagicMock()
+    storage.get_articles_since.return_value = [
+        {"source": "Fed Monetary Policy", "title": "FOMC statement", "url": "https://fed.gov/1", "summary": "Rate held at 4.25%", "category": "policy", "collected_at": "2026-04-23 07:00:00"},
+    ]
+    gen = BriefingGenerator(storage=storage)
+    text = gen.format_briefing("morning")
+    assert "[정책·지표]" in text
+    assert "Fed Monetary Policy" in text
+    assert "FOMC statement" in text
+
+
 def test_format_briefing_empty(mock_storage):
     mock_storage.get_articles_since.return_value = []
     gen = BriefingGenerator(storage=mock_storage)
