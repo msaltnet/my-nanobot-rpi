@@ -30,7 +30,6 @@ if [ ! -f .env ]; then
 OPENAI_API_KEY=sk-your-key-here
 TELEGRAM_BOT_TOKEN=your-bot-token-here
 TELEGRAM_USER_ID=your-telegram-user-id
-YOUTUBE_API_KEY=your-youtube-api-key
 ENVEOF
     echo "Created .env file — edit with your API keys!"
 fi

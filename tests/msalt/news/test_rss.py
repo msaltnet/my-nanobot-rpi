@@ -57,7 +57,6 @@ def test_load_sources(tmp_path):
     sources_file = tmp_path / "sources.json"
     sources_file.write_text(json.dumps({
         "rss": [{"name": "Test", "url": "https://test.com/rss", "category": "domestic"}],
-        "youtube": [],
     }))
     collector = RssCollector(sources_path=str(sources_file))
     sources = collector.load_sources()

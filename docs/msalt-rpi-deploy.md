@@ -45,7 +45,6 @@ nano /home/pi/msalt-nanobot/.env
 OPENAI_API_KEY=sk-your-actual-key-here
 TELEGRAM_BOT_TOKEN=your-actual-bot-token-here
 TELEGRAM_USER_ID=your-telegram-user-id
-YOUTUBE_API_KEY=your-youtube-api-key-here
 ```
 
 ### config.json 설정

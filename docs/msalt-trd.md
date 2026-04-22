@@ -8,7 +8,7 @@
 
 ## 1. 시스템 개요
 
-msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워크를 호스트하고, 그 위에 msalt 전용 도메인 모듈(`msalt/`)을 얹은 구조다. 외부와는 텔레그램 봇 API와 OpenAI / RSS / YouTube API로 연결된다.
+msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워크를 호스트하고, 그 위에 msalt 전용 도메인 모듈(`msalt/`)을 얹은 구조다. 외부와는 텔레그램 봇 API와 OpenAI / RSS 피드로 연결된다.
 
 ### 컨텍스트 다이어그램
 
@@ -42,10 +42,10 @@ msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워
    └─────┬──────────┬──────────────────────────────────┘
          │          │
          ▼          ▼
-   ┌─────────┐ ┌─────────┐ ┌─────────────┐
-   │ OpenAI  │ │  RSS    │ │ YouTube Data│
-   │  API    │ │ Feeds   │ │     API     │
-   └─────────┘ └─────────┘ └─────────────┘
+   ┌─────────┐ ┌─────────┐
+   │ OpenAI  │ │  RSS    │
+   │  API    │ │ Feeds   │
+   └─────────┘ └─────────┘
 ```
 
 ## 2. 아키텍처
@@ -85,11 +85,10 @@ msalt/
 ├── storage.py             # SQLite Storage 클래스
 ├── news/
 │   ├── rss.py             # RssCollector
-│   ├── youtube.py         # YoutubeCollector
 │   ├── collector.py       # NewsCollector (오케스트레이터)
 │   ├── briefing.py        # BriefingGenerator
 │   ├── cli.py             # python -m msalt.news 엔트리포인트
-│   ├── sources.json       # RSS/YouTube 소스 목록
+│   ├── sources.json       # RSS 소스 목록
 │   └── __main__.py
 ├── tracking/
 │   ├── items.py           # TrackedItemManager
@@ -125,20 +124,17 @@ SQLite 3개 테이블(`news_articles`, `tracked_items`, `records`)에 대한 CRU
 **`rss.py` — RssCollector**
 `sources.json`의 RSS 피드 목록을 읽고 `feedparser`로 파싱한다. 피드별로 최근 N개 기사 제목·URL·요약·게시일을 추출해 표준 dict 리스트로 반환한다. 네트워크 에러는 소스 단위로 격리(한 피드가 죽어도 다른 피드는 계속).
 
-**`youtube.py` — YoutubeCollector**
-YouTube Data API로 채널의 최신 영상을 조회한다. 영상 제목·URL·게시일을 RSS 기사와 동일한 스키마로 변환(`format_as_article`)해 후속 파이프라인이 통합 처리할 수 있게 한다. 자막(`get_transcript`)은 현재 placeholder — 추후 확장.
-
 **`collector.py` — NewsCollector**
-RSS와 YouTube 수집 결과를 합치고 `Storage.insert_article`로 저장한다. URL UNIQUE 제약으로 중복 자동 차단. 수집 자체만 책임지고 요약은 하지 않는다.
+RSS 수집 결과를 `Storage.insert_article`로 저장한다. URL UNIQUE 제약으로 중복 자동 차단. 수집 자체만 책임지고 요약은 하지 않는다.
 
 **`briefing.py` — BriefingGenerator**
-DB에 누적된 최근 기사를 읽어 OpenAI GPT로 요약 브리핑 텍스트를 생성한다. 카테고리(국내/해외/유튜브)별로 묶고, 카테고리당 3~5개 항목을 뽑아 한국어 헤드라인 + 한 줄 요약 형태로 출력한다. URL 기반 dedup은 이 시점에도 한 번 더 적용.
+DB에 누적된 최근 기사를 읽어 OpenAI GPT로 요약 브리핑 텍스트를 생성한다. 카테고리(국내/해외)별로 묶고, 카테고리당 3~5개 항목을 뽑아 한국어 헤드라인 + 한 줄 요약 형태로 출력한다. URL 기반 dedup은 이 시점에도 한 번 더 적용.
 
 **`cli.py` — main**
 `python -m msalt.news <command>` 엔트리포인트. 서브커맨드: `collect`(수집만), `briefing`(수집 후 요약 생성), `search <keyword>`(DB 검색). 크론 트리거와 사용자 명령 양쪽에서 공유.
 
 **`sources.json`**
-RSS 피드 5개(한경·매경·조선비즈·Reuters·CNBC)와 YouTube 채널 2개(삼프로TV·슈카월드)의 ID/URL 정의. 코드 변경 없이 소스 추가·제거 가능.
+RSS 피드 5개(한국경제·매일경제·경향신문 경제·BBC Business·CNBC)의 name/URL/category 정의. 코드 변경 없이 소스 추가·제거 가능.
 
 ### 3.3 트래킹 도메인 (L2: `msalt/tracking/`)
 
@@ -182,11 +178,11 @@ SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 3개 테이블.
 | 컬럼 | 타입 | 용도 |
 |------|------|------|
 | `id` | INTEGER PK | 자동 증가 |
-| `source` | TEXT | 소스 식별자 (예: `hankyung`, `youtube:samprotv`) |
-| `title` | TEXT | 기사/영상 제목 |
+| `source` | TEXT | 소스 식별자 (예: `한국경제`, `BBC Business`) |
+| `title` | TEXT | 기사 제목 |
 | `url` | TEXT UNIQUE | 원문 URL — UNIQUE 제약으로 중복 자동 차단 |
-| `summary` | TEXT | RSS의 description 또는 영상 설명 |
-| `category` | TEXT | `domestic`/`global`/`youtube` |
+| `summary` | TEXT | RSS의 description |
+| `category` | TEXT | `domestic`/`international` |
 | `collected_at` | TEXT | 수집 시각 (`datetime('now')`) |
 
 ### `tracked_items` — 사용자 정의 추적 항목
@@ -222,10 +218,9 @@ SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 3개 테이블.
 | **nanobot core** | 에이전트 루프, 채널, 크론, 메모리, dream | 호스트 프로세스 | — |
 | **OpenAI API** (gpt-5-mini) | 브리핑 요약, 대화 응답 | `briefing.py`, nanobot agent loop | `OPENAI_API_KEY` |
 | **Telegram Bot API** | 사용자 인터페이스 | nanobot telegram channel | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID` (allowlist) |
-| **YouTube Data API v3** | 채널 최신 영상 조회 | `youtube.py` | `YOUTUBE_API_KEY` |
-| **RSS 피드** (5개) | 한국·미국 뉴스 수집 | `rss.py` | 없음 (공개) |
+| **RSS 피드** (5개) | 한국·해외 뉴스 수집 | `rss.py` | 없음 (공개) |
 | **feedparser** | RSS XML 파싱 | `rss.py` | — |
-| **httpx** | YouTube API HTTP 호출 + tracking dispatcher의 Telegram 발송 | `youtube.py`, `tracking/cli.py` | — |
+| **httpx** | tracking dispatcher의 Telegram 발송 | `tracking/cli.py` | — |
 | **python-telegram-bot** | Telegram 통신 (nanobot 내부) | nanobot | — |
 | **sqlite3** | DB I/O | `storage.py` | — (Python 표준) |
 
@@ -289,7 +284,7 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 
 ### 모킹 정책
 
-- **외부 API (OpenAI/YouTube/RSS)**: 모두 모킹. 실제 호출은 통합 테스트에서만 수동 수행.
+- **외부 API (OpenAI/RSS)**: 모두 모킹. 실제 RSS 호출은 `python -m msalt.news.smoke`로 수동 수행.
 - **SQLite**: 임시 파일 DB(`tmp_path`)로 실제 동작 검증 — 모킹하지 않음.
 - **시간**: `freezegun` 또는 인자 주입으로 제어.
 
