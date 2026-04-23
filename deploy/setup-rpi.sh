@@ -6,11 +6,31 @@ set -euo pipefail
 echo "=== msalt-nanobot RPi Setup ==="
 
 # 1. swap 설정 (1GB)
+# RPi OS면 dphys-swapfile, 그 외(Ubuntu 등)는 /swapfile 방식으로 폴백.
 echo "Setting up 1GB swap..."
-sudo dphys-swapfile swapoff || true
-sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
-sudo dphys-swapfile setup
-sudo dphys-swapfile swapon
+if command -v dphys-swapfile >/dev/null 2>&1; then
+    echo "  using dphys-swapfile (Raspberry Pi OS)"
+    sudo dphys-swapfile swapoff || true
+    sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+    sudo dphys-swapfile setup
+    sudo dphys-swapfile swapon
+else
+    echo "  using /swapfile (generic Debian/Ubuntu)"
+    CUR_SWAP_KB=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)
+    if [ "${CUR_SWAP_KB:-0}" -lt 1000000 ]; then
+        sudo swapoff -a || true
+        sudo rm -f /swapfile
+        sudo fallocate -l 1G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        if ! grep -q '^/swapfile' /etc/fstab; then
+            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+        fi
+    else
+        echo "  swap already >= 1GB, skipping"
+    fi
+fi
 
 # 2. Python 3.11+ 설치
 echo "Installing Python 3.11..."

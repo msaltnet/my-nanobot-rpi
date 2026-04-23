@@ -214,9 +214,27 @@ sudo systemctl start msalt-nanobot
 
 ```bash
 swapon --show
+free -h
 ```
 
-swap이 비활성화된 경우 수동으로 설정:
+`setup-rpi.sh`는 OS를 감지해 swap을 1GB로 설정합니다:
+
+- **Raspberry Pi OS**: `dphys-swapfile` 사용
+- **Ubuntu / 일반 Debian**: `/swapfile` + `/etc/fstab` 등록으로 폴백
+
+수동으로 1GB swap을 추가하려면 (Ubuntu 등):
+
+```bash
+sudo swapoff -a
+sudo rm -f /swapfile
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Raspberry Pi OS에서 `dphys-swapfile`로:
 
 ```bash
 sudo dphys-swapfile swapoff
