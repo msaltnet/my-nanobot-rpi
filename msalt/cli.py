@@ -32,6 +32,7 @@ SEED_CONFIG = HERE / "nanobot-config.example.json"
 SEED_SOUL = HERE / "workspace" / "SOUL.md"
 SEED_USER = HERE / "workspace" / "USER.md"
 SEED_SKILLS_DIR = HERE / "skills"
+SEED_CRON_JOBS = HERE / "workspace" / "cron" / "jobs.json"
 
 REQUIRED_ENV_VARS = ("OPENAI_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_USER_ID")
 
@@ -96,6 +97,18 @@ def _seed_if_missing() -> list[str]:
             if not target.exists():
                 shutil.copytree(skill_dir, target)
                 created.append(str(target))
+
+    # 크론 잡 seed — 아침/저녁 자동 브리핑.
+    # jobs.json은 env var 치환을 지원하지 않아 seed 시점에 직접 ${TELEGRAM_USER_ID}를 박는다.
+    cron_target = workspace_dir / "cron" / "jobs.json"
+    if not cron_target.exists() and SEED_CRON_JOBS.exists():
+        cron_target.parent.mkdir(parents=True, exist_ok=True)
+        body = SEED_CRON_JOBS.read_text(encoding="utf-8")
+        tg_id = os.environ.get("TELEGRAM_USER_ID", "").strip()
+        if tg_id:
+            body = body.replace("${TELEGRAM_USER_ID}", tg_id)
+        cron_target.write_text(body, encoding="utf-8")
+        created.append(str(cron_target))
     return created
 
 
@@ -190,7 +203,25 @@ def doctor() -> None:
         mark = "[green]✓[/green]" if p.exists() else "[red]✗[/red]"
         console.print(f"{mark} workspace/{name}: {p}")
 
-    # 6. RSS 소스 점검
+    # 6. 크론 잡 (아침/저녁 자동 브리핑)
+    cron_path = NANOBOT_HOME / "workspace" / "cron" / "jobs.json"
+    if cron_path.exists():
+        import json as _json
+        try:
+            data = _json.loads(cron_path.read_text(encoding="utf-8"))
+            enabled = [j for j in data.get("jobs", []) if j.get("enabled")]
+            unresolved = [j["id"] for j in enabled
+                          if "${TELEGRAM_USER_ID}" in _json.dumps(j)]
+            if unresolved:
+                console.print(f"[yellow]⚠[/yellow] cron: {len(enabled)}개 활성 (미치환 ${{TELEGRAM_USER_ID}}: {unresolved})")
+            else:
+                console.print(f"[green]✓[/green] cron: {len(enabled)}개 활성 ({cron_path})")
+        except Exception as e:
+            console.print(f"[red]✗[/red] cron 파싱 실패: {e}")
+    else:
+        console.print(f"[red]✗[/red] cron jobs.json 없음: {cron_path}")
+
+    # 7. RSS 소스 점검
     console.print("\n[bold]RSS 소스 점검[/bold]")
     from msalt.news.smoke import check_rss
     sources_path = str(HERE / "news" / "sources.json")

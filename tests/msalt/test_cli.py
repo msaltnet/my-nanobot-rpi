@@ -55,6 +55,39 @@ def test_seed_if_missing_creates_files(tmp_path, monkeypatch):
     assert (tmp_path / "nano" / "workspace" / "SOUL.md").exists()
 
 
+def test_seed_substitutes_telegram_user_id_in_cron_jobs(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr("msalt.cli.NANOBOT_HOME", tmp_path / "nano")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "123456789")
+    _seed_if_missing()
+    jobs_file = tmp_path / "nano" / "workspace" / "cron" / "jobs.json"
+    assert jobs_file.exists()
+    data = json.loads(jobs_file.read_text(encoding="utf-8"))
+    jobs = data["jobs"]
+    assert len(jobs) == 2
+    assert {j["id"] for j in jobs} == {
+        "msalt-news-briefing-morning",
+        "msalt-news-briefing-evening",
+    }
+    # ${TELEGRAM_USER_ID} 치환 확인
+    assert all(j["payload"]["to"] == "123456789" for j in jobs)
+    # 치환 후에는 플레이스홀더가 남아있지 않아야 한다
+    assert "${TELEGRAM_USER_ID}" not in jobs_file.read_text(encoding="utf-8")
+    # 스케줄
+    schedules = {j["id"]: j["schedule"]["expr"] for j in jobs}
+    assert schedules["msalt-news-briefing-morning"] == "0 7 * * *"
+    assert schedules["msalt-news-briefing-evening"] == "0 19 * * *"
+
+
+def test_seed_leaves_placeholder_when_telegram_user_id_missing(tmp_path, monkeypatch):
+    """TELEGRAM_USER_ID 없이 seed된 경우 플레이스홀더 그대로 남아 doctor가 경고할 수 있어야 한다."""
+    monkeypatch.setattr("msalt.cli.NANOBOT_HOME", tmp_path / "nano")
+    monkeypatch.delenv("TELEGRAM_USER_ID", raising=False)
+    _seed_if_missing()
+    jobs_file = tmp_path / "nano" / "workspace" / "cron" / "jobs.json"
+    assert "${TELEGRAM_USER_ID}" in jobs_file.read_text(encoding="utf-8")
+
+
 def test_seed_copies_skills_so_agent_can_find_them(tmp_path, monkeypatch):
     """nanobot SkillsLoader는 ~/.nanobot/workspace/skills/만 스캔한다.
     seed 단계에서 msalt/skills/*를 거기로 복사해야 agent가 찾을 수 있다."""
