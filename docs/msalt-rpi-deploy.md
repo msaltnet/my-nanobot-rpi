@@ -2,10 +2,11 @@
 
 ## 요구사항
 
-- Raspberry Pi 3B+
+- Raspberry Pi 3B+ (1GB RAM)
 - Raspberry Pi OS Lite (64-bit 권장)
 - Python 3.11+
 - 인터넷 연결
+- 시스템 시간대 `Asia/Seoul` 권장 (`sudo timedatectl set-timezone Asia/Seoul`)
 
 ## 설치 절차
 
@@ -23,35 +24,69 @@ cd msalt-nanobot
 bash deploy/setup-rpi.sh
 ```
 
-스크립트가 다음 작업을 자동으로 수행합니다:
+스크립트가 수행하는 작업:
 
 - swap 1GB 설정 (메모리 부족 방지)
 - Python 3.11 설치
-- 가상환경 생성 및 패키지 설치
-- `.env` 파일 생성 (초기 템플릿)
-- systemd 서비스 등록 및 자동 시작 설정
+- 가상환경 생성 및 `pip install -e .`
+- `.env` 파일 생성 (이미 있으면 보존)
+- `msalt-nanobot.service` systemd 등록 + enable
+- `msalt-tracking-dispatch.timer` 등록 + enable + start (30분 주기)
+
+**스크립트 재실행은 안전합니다.** `.env`는 덮어쓰지 않고, 유닛 파일만 새 버전으로 갱신합니다. 단, **이미 실행 중인 서비스는 자동 재시작되지 않으므로** 유닛 변경을 반영하려면 명시적으로:
+
+```bash
+sudo systemctl restart msalt-nanobot
+sudo systemctl restart msalt-tracking-dispatch.timer
+```
 
 ## 설정
 
 ### .env 파일
 
-스크립트 실행 후 `/home/pi/msalt-nanobot/.env` 파일을 편집합니다:
+`/home/pi/msalt-nanobot/.env`를 편집합니다. systemd가 `EnvironmentFile`로 자동 로드합니다.
 
 ```bash
 nano /home/pi/msalt-nanobot/.env
 ```
 
 ```env
+# 필수
 OPENAI_API_KEY=sk-your-actual-key-here
 TELEGRAM_BOT_TOKEN=your-actual-bot-token-here
-TELEGRAM_USER_ID=your-telegram-user-id
+TELEGRAM_USER_ID=123456789
+
+# 선택 (없으면 DuckDuckGo로 fallback)
+TAVILY_API_KEY=tvly-...
+BRAVE_API_KEY=BSA...
 ```
 
-### config · workspace seed
+**중요**: `TELEGRAM_USER_ID`는 **숫자 ID**여야 합니다. [@userinfobot](https://t.me/userinfobot)에서 `/start` 치면 `Id: 123456789` 형태로 받을 수 있습니다. 핸들(`@msalt_net`)은 동작하지 않습니다.
 
-`msalt-nanobot`을 처음 실행하면 `~/.nanobot/config.json`, `~/.nanobot/workspace/SOUL.md`, `~/.nanobot/workspace/USER.md`가 자동으로 seed됩니다. systemd `ExecStart`가 `msalt-nanobot`을 호출하므로 별도 복사 단계는 없습니다.
+**웹 검색 provider**: `~/.nanobot/config.json`의 `tools.web.search.provider`에서 선택(`tavily`/`brave`/`duckduckgo`). 해당 provider의 env var 키가 `.env`에 있으면 자동으로 사용됩니다. 한 번에 하나만 활성.
 
-페르소나를 커스터마이즈하려면 seed 이후 편집:
+### 최초 기동 및 seed 점검
+
+`msalt-nanobot`을 처음 실행하면 `~/.nanobot/` 전체가 msalt 템플릿으로 자동 생성됩니다:
+
+| 경로 | 내용 |
+|------|------|
+| `~/.nanobot/config.json` | nanobot 기본 설정 (`${OPENAI_API_KEY}` 등 `.env` 참조) |
+| `~/.nanobot/workspace/SOUL.md` | 봇 페르소나 |
+| `~/.nanobot/workspace/USER.md` | 사용자 프로필 |
+| `~/.nanobot/workspace/skills/{news,news-briefing,tracking}/` | msalt 스킬 |
+| `~/.nanobot/workspace/cron/jobs.json` | 07:00/19:00 KST 자동 브리핑 크론 잡 (`${TELEGRAM_USER_ID}` 치환됨) |
+
+점검 커맨드:
+
+```bash
+source .venv/bin/activate
+msalt-nanobot doctor
+```
+
+모든 체크에 녹색 ✓가 떠야 정상. 노란색 ⚠가 나오면 `.env`에 `TELEGRAM_USER_ID` 누락 등이 원인일 수 있습니다.
+
+페르소나 커스터마이즈는 seed 이후에:
 
 ```bash
 nano ~/.nanobot/workspace/SOUL.md
@@ -59,53 +94,57 @@ nano ~/.nanobot/workspace/SOUL.md
 
 ## systemd 서비스 관리
 
-### 서비스 시작
+### 주요 명령
 
 ```bash
-sudo systemctl start msalt-nanobot
+sudo systemctl start msalt-nanobot       # 시작
+sudo systemctl stop msalt-nanobot        # 중지
+sudo systemctl restart msalt-nanobot     # 재시작 (.env 변경 반영)
+sudo systemctl status msalt-nanobot      # 상태 확인
 ```
 
-### 서비스 중지
+### 로그
 
 ```bash
-sudo systemctl stop msalt-nanobot
-```
-
-### 서비스 재시작
-
-```bash
-sudo systemctl restart msalt-nanobot
-```
-
-### 서비스 상태 확인
-
-```bash
-sudo systemctl status msalt-nanobot
-```
-
-### 로그 확인
-
-```bash
-# 실시간 로그 스트림
+# 실시간 스트림
 journalctl -u msalt-nanobot -f
 
 # 최근 100줄
 journalctl -u msalt-nanobot -n 100
 ```
 
-### 자동 시작 활성화/비활성화
+### 자동 시작
 
 ```bash
-# 부팅 시 자동 시작 활성화
-sudo systemctl enable msalt-nanobot
-
-# 부팅 시 자동 시작 비활성화
+sudo systemctl enable msalt-nanobot      # 부팅 시 자동 시작 (setup-rpi.sh가 이미 수행)
 sudo systemctl disable msalt-nanobot
 ```
 
+## 자동 브리핑 (nanobot cron)
+
+nanobot 내장 크론이 `~/.nanobot/workspace/cron/jobs.json`을 읽어 평일 07:00/19:00 KST에 `news-briefing` 스킬을 트리거하고, 결과를 텔레그램으로 자동 발송합니다. 별도 systemd 타이머 없이 `msalt-nanobot` 프로세스 자체가 처리합니다.
+
+### 잡 확인
+
+```bash
+cat ~/.nanobot/workspace/cron/jobs.json
+```
+
+`"to": "123456789"` 형태로 숫자 ID가 치환되어 있어야 합니다. `${TELEGRAM_USER_ID}`가 그대로 남아 있으면 `.env`의 `TELEGRAM_USER_ID`가 비어 있었던 것 — `.env`를 고친 뒤 재 seed:
+
+```bash
+rm ~/.nanobot/workspace/cron/jobs.json
+msalt-nanobot doctor
+sudo systemctl restart msalt-nanobot
+```
+
+### 스케줄/메시지 변경
+
+`jobs.json`을 직접 편집하면 됩니다. nanobot이 파일 mtime을 감지해 자동 reload합니다 (서비스 재시작 불필요).
+
 ## tracking dispatcher 타이머
 
-`setup-rpi.sh`가 30분 주기 추적 디스패처 타이머(`msalt-tracking-dispatch.timer`)도 함께 등록·활성화합니다. 시각이 도래한 항목과 누락 항목을 텔레그램으로 자동 질문합니다.
+`setup-rpi.sh`가 30분 주기 추적 디스패처 타이머(`msalt-tracking-dispatch.timer`)도 함께 등록·활성화합니다. 시각이 도래한 추적 항목과 누락 항목을 텔레그램으로 자동 질문합니다.
 
 ### 타이머 상태 확인
 
@@ -130,33 +169,44 @@ sudo systemctl start msalt-tracking-dispatch.service
 
 Raspberry Pi 3B+는 RAM이 1GB이므로 메모리 사용량을 주기적으로 확인합니다.
 
-### 메모리 현황 확인
-
 ```bash
 free -h
-```
-
-출력 예시:
-
-```
-               total        used        free      shared  buff/cache   available
-Mem:           927Mi       450Mi       100Mi        20Mi       376Mi       457Mi
-Swap:          1.0Gi        50Mi       974Mi
-```
-
-### 상세 프로세스 모니터링
-
-```bash
-htop
-```
-
-htop이 없는 경우 설치:
-
-```bash
-sudo apt-get install -y htop
+htop   # 없으면 sudo apt-get install -y htop
 ```
 
 ## 트러블슈팅
+
+### 환경변수/API 키 문제
+
+서비스 로그에서 인증 오류가 발생하는 경우:
+
+```bash
+journalctl -u msalt-nanobot -n 50 | grep -i "error\|auth\|key"
+cat /home/pi/msalt-nanobot/.env
+sudo systemctl restart msalt-nanobot   # .env 변경 반영
+```
+
+### 텔레그램 연결 문제
+
+1. `TELEGRAM_USER_ID`가 **숫자**인지 확인 (핸들 불가)
+2. 봇 토큰 유효성 확인:
+   ```bash
+   curl -s https://api.telegram.org/bot<TOKEN>/getMe
+   ```
+3. `jobs.json`의 `"to"`가 숫자로 치환됐는지 확인
+
+### 이전에 쌓인 `~/.nanobot/` 설정을 리셋하고 싶을 때
+
+다른 nanobot 프로젝트에서 남긴 MCP 서버나 불필요한 설정(예: yfinance)이 에러를 일으킬 수 있습니다. 통째로 초기화:
+
+```bash
+sudo systemctl stop msalt-nanobot
+mv ~/.nanobot ~/.nanobot.bak.$(date +%Y%m%d)
+msalt-nanobot doctor                        # 깨끗한 msalt 템플릿으로 재 seed
+sudo systemctl start msalt-nanobot
+```
+
+백업(`~/.nanobot.bak.*`)은 며칠 확인 후 `rm -rf`로 삭제.
 
 ### swap 관련 문제
 
@@ -175,41 +225,8 @@ sudo dphys-swapfile setup
 sudo dphys-swapfile swapon
 ```
 
-### API 키 문제
+### 브리핑 내용이 비어 있음
 
-서비스 로그에서 인증 오류가 발생하는 경우:
-
-```bash
-journalctl -u msalt-nanobot -n 50 | grep -i "error\|auth\|key"
-```
-
-`.env` 파일의 API 키가 올바른지 확인합니다:
-
-```bash
-cat /home/pi/msalt-nanobot/.env
-```
-
-서비스 재시작으로 변경된 환경변수 적용:
-
-```bash
-sudo systemctl restart msalt-nanobot
-```
-
-### 텔레그램 연결 문제
-
-봇이 메시지에 응답하지 않는 경우:
-
-1. 봇 토큰이 올바른지 확인합니다.
-2. 네트워크 연결 상태를 확인합니다:
-
-```bash
-curl -s https://api.telegram.org/bot<YOUR_TOKEN>/getMe
-```
-
-3. 서비스 로그에서 텔레그램 관련 오류를 확인합니다:
-
-```bash
-journalctl -u msalt-nanobot -f
-```
-
-4. allowed_users 설정에 본인의 텔레그램 username이 포함되어 있는지 확인합니다.
+- RSS 소스 점검: `msalt-nanobot doctor`
+- 수동 수집: `msalt-nanobot news collect`
+- 수동 브리핑: `msalt-nanobot news briefing morning`

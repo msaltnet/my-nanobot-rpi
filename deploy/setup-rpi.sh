@@ -27,11 +27,18 @@ pip install -e .
 # 4. .env 파일 생성 (사용자가 직접 편집)
 if [ ! -f .env ]; then
     cat > .env << 'ENVEOF'
+# 필수
 OPENAI_API_KEY=sk-your-key-here
 TELEGRAM_BOT_TOKEN=your-bot-token-here
-TELEGRAM_USER_ID=your-telegram-user-id
+TELEGRAM_USER_ID=your-telegram-user-id-numeric
+
+# 선택 — 웹 검색 provider (~/.nanobot/config.json의 provider와 매칭되는 키만 사용됨)
+#TAVILY_API_KEY=tvly-...
+#BRAVE_API_KEY=BSA...
 ENVEOF
     echo "Created .env file — edit with your API keys!"
+else
+    echo ".env already exists — preserved. If .env.example added new keys, copy them manually."
 fi
 
 # 5. systemd 서비스 등록
@@ -48,8 +55,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now msalt-tracking-dispatch.timer
 
 echo "=== Setup complete! ==="
-echo "1. Edit .env with your API keys"
-echo "2. Edit ~/.nanobot/config.json (see msalt/nanobot-config.example.json)"
-echo "3. Start: sudo systemctl start msalt-nanobot"
-echo "4. Logs: journalctl -u msalt-nanobot -f"
-echo "5. Tracking timer: systemctl list-timers msalt-tracking-dispatch.timer"
+echo "1. Edit .env with your API keys (TELEGRAM_USER_ID must be numeric)"
+echo "2. msalt-nanobot doctor  # verify env, auto-seed config/workspace/skills/cron"
+echo "3. sudo systemctl start msalt-nanobot"
+echo "4. journalctl -u msalt-nanobot -f"
+echo "5. systemctl list-timers msalt-tracking-dispatch.timer"
+echo ""
+echo "Re-running this script on an existing install:"
+echo "  .env is preserved, unit files are refreshed, but running services"
+echo "  keep the old definition. Apply unit changes with:"
+echo "    sudo systemctl restart msalt-nanobot"
+echo "    sudo systemctl restart msalt-tracking-dispatch.timer"
