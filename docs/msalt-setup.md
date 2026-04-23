@@ -23,51 +23,39 @@
 
 ---
 
-## 환경 변수 설정
-
-`~/.bashrc` 또는 `~/.zshrc` 파일에 다음 내용을 추가:
+## 설정과 기동
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-export TELEGRAM_BOT_TOKEN="1234567890:ABC..."
-```
-
-설정 후 터미널을 재시작하거나 `source ~/.bashrc` 실행.
-
----
-
-## nanobot config 설정
-
-### config 예시 복사
-
-프로젝트 루트에서 다음 명령 실행:
-
-```bash
-cp msalt/nanobot-config.example.json nanobot-config.json
-```
-
-### allowFrom 편집
-
-`nanobot-config.json` 파일에서 `allowFrom` 값을 본인의 Telegram User ID로 변경:
-
-```json
-"allowFrom": ["123456789"]
-```
-
----
-
-## 실행 방법
-
-### 패키지 설치
-
-```bash
+# 1. 설치
 pip install -e .
+
+# 2. 환경 변수
+cp .env.example .env
+# .env 편집 — 3개 값 입력:
+#   OPENAI_API_KEY=sk-...
+#   TELEGRAM_BOT_TOKEN=...
+#   TELEGRAM_USER_ID=...   (숫자 ID)
+
+# 3. 기동
+msalt-nanobot
 ```
 
-### nanobot gateway 실행
+첫 실행 시 `~/.nanobot/config.json`과 `~/.nanobot/workspace/{SOUL,USER}.md`가
+msalt 기본 템플릿으로 자동 생성됩니다.
+
+## 상태 점검
 
 ```bash
-nanobot gateway
+msalt-nanobot doctor
 ```
 
-Telegram 봇이 활성화되어 메시지를 수신하기 시작합니다.
+`.env` 로드 여부, 필수 환경 변수, config·workspace 파일 존재, RSS 소스 11개의
+실시간 연결 상태까지 한 번에 점검합니다.
+
+## 선택: 웹 검색 provider
+
+`.env`에 `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`를 넣으면 해당 provider가
+자동으로 사용됩니다. 키가 없으면 DuckDuckGo로 fallback.
+
+`~/.nanobot/config.json`의 `tools.web.search.provider` 필드로 선택:
+`tavily` (기본) / `brave` / `duckduckgo`.

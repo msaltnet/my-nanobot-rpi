@@ -51,6 +51,7 @@ dependencies = [
     "jinja2>=3.1.0,<4.0.0",
     "dulwich>=0.22.0,<1.0.0",
     "feedparser>=6.0.0,<7.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -86,6 +87,7 @@ dev = [
 
 [project.scripts]
 nanobot = "nanobot.cli.commands:app"
+msalt-nanobot = "msalt.cli:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -100,13 +102,17 @@ include = [
     "nanobot/templates/**/*.md",
     "nanobot/skills/**/*.md",
     "nanobot/skills/**/*.sh",
+    "msalt/**/*.py",
+    "msalt/**/*.md",
+    "msalt/**/*.json",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["nanobot"]
+packages = ["nanobot", "msalt"]
 
 [tool.hatch.build.targets.wheel.sources]
 "nanobot" = "nanobot"
+"msalt" = "msalt"
 
 [tool.hatch.build.targets.wheel.force-include]
 "bridge" = "nanobot/bridge"

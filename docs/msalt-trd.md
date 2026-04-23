@@ -233,7 +233,7 @@ SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 3개 테이블.
 ```
 Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 └── systemd: msalt-nanobot.service
-    └── nanobot gateway
+    └── msalt-nanobot (→ nanobot gateway)
         ├── Telegram channel (long polling)
         ├── Cron service
         │   ├── 07:00 KST → news-briefing skill

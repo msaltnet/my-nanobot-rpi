@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 
 class Storage:
@@ -9,6 +10,7 @@ class Storage:
 
     def initialize(self):
         """모든 테이블을 생성한다."""
+        Path(self.db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS news_articles (

@@ -47,26 +47,11 @@ TELEGRAM_BOT_TOKEN=your-actual-bot-token-here
 TELEGRAM_USER_ID=your-telegram-user-id
 ```
 
-### config.json 설정
+### config · workspace seed
 
-nanobot 설정 파일은 `.env` 값을 자동 참조하므로 편집이 불필요합니다:
+`msalt-nanobot`을 처음 실행하면 `~/.nanobot/config.json`, `~/.nanobot/workspace/SOUL.md`, `~/.nanobot/workspace/USER.md`가 자동으로 seed됩니다. systemd `ExecStart`가 `msalt-nanobot`을 호출하므로 별도 복사 단계는 없습니다.
 
-```bash
-mkdir -p ~/.nanobot
-cp msalt/nanobot-config.example.json ~/.nanobot/config.json
-```
-
-### workspace 사전 세팅
-
-봇 페르소나(`SOUL.md`)와 사용자 정보(`USER.md`) 템플릿을 workspace에 복사합니다:
-
-```bash
-mkdir -p ~/.nanobot/workspace
-cp msalt/workspace/SOUL.md ~/.nanobot/workspace/SOUL.md
-cp msalt/workspace/USER.md ~/.nanobot/workspace/USER.md
-```
-
-이 파일들은 첫 실행 시 시스템 프롬프트에 주입되며, 이후 대화를 통해 `dream` 시스템이 자동으로 업데이트합니다. 페르소나를 커스터마이즈하려면 복사 후 편집하세요:
+페르소나를 커스터마이즈하려면 seed 이후 편집:
 
 ```bash
 nano ~/.nanobot/workspace/SOUL.md
