@@ -1,18 +1,54 @@
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 
 from msalt.storage import Storage
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_MODEL = "gpt-5-mini"
+MAX_ARTICLES_PER_CATEGORY = 10
+
+CATEGORY_LABELS = {
+    "domestic": "국내",
+    "international": "해외",
+    "policy": "정책·지표",
+    "reddit": "커뮤니티",
+}
+
+CATEGORY_ORDER = ["domestic", "international", "policy", "reddit"]
+
+SYSTEM_PROMPT = (
+    "당신은 한국어 경제 뉴스 편집자다. 주어진 기사 목록을 읽고 "
+    "카테고리의 핵심 흐름을 요약한다.\n"
+    "규칙:\n"
+    "- 총 5문장 이내. 더 쓰지 말 것.\n"
+    "- 사실만, 추측 금지.\n"
+    "- 중복되는 헤드라인은 하나로 합친다.\n"
+    "- 한 문장에 하나의 주제만. 여러 주제를 접속사로 이어 붙이지 말 것.\n"
+    "- 숫자·고유명사는 원문 그대로.\n"
+    "- 서론·맺음말 없이 본론만.\n"
+    "- 각 문장 끝에 근거 기사 번호를 [1], [1,3] 형태로 표기."
+)
+
 
 class BriefingGenerator:
-    """수집된 뉴스를 브리핑 텍스트로 포맷한다."""
+    """수집된 뉴스를 카테고리별 LLM 요약 + 원문 링크로 정리한 브리핑 텍스트를 생성한다."""
 
-    def __init__(self, storage: Storage):
+    def __init__(
+        self,
+        storage: Storage,
+        *,
+        use_llm: bool = True,
+        model: str = DEFAULT_MODEL,
+    ):
         self.storage = storage
+        self.use_llm = use_llm
+        self.model = model
 
     def get_articles_for_briefing(self, hours: int = 12) -> list[dict]:
-        since = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+        # collected_at은 SQLite datetime('now') = UTC로 저장되므로 비교도 UTC로 맞춘다.
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
         articles = self.storage.get_articles_since(since)
-        # URL 기반 중복 제거
         seen_urls = set()
         unique = []
         for article in articles:
@@ -23,53 +59,80 @@ class BriefingGenerator:
 
     def format_briefing(self, time_of_day: str = "morning") -> str:
         articles = self.get_articles_for_briefing()
-
-        if not articles:
-            label = "아침" if time_of_day == "morning" else "저녁"
-            return f"{label} 경제 브리핑 — 수집된 뉴스가 없습니다."
-
-        today = datetime.now().strftime("%Y-%m-%d")
         label = "아침" if time_of_day == "morning" else "저녁"
 
-        domestic = [a for a in articles if a["category"] == "domestic"]
-        international = [a for a in articles if a["category"] == "international"]
-        policy = [a for a in articles if a["category"] == "policy"]
-        reddit = [a for a in articles if a["category"] == "reddit"]
+        if not articles:
+            return f"{label} 경제 브리핑 - 수집된 뉴스가 없습니다."
 
+        today = datetime.now().strftime("%Y-%m-%d")
         lines = [f"{label} 경제 브리핑 ({today})", ""]
 
-        if domestic:
-            lines.append("[국내]")
-            for i, a in enumerate(domestic, 1):
-                lines.append(f"{i}. {a['title']}")
-                if a.get("summary"):
-                    lines.append(f"   {a['summary'][:200]}")
-                lines.append(f"   원문: {a['url']}")
-                lines.append("")
+        for category in CATEGORY_ORDER:
+            bucket = [a for a in articles if a["category"] == category][:MAX_ARTICLES_PER_CATEGORY]
+            if not bucket:
+                continue
+            lines.append(f"[{CATEGORY_LABELS[category]}]")
+            lines.append(self._render_category(bucket))
+            lines.append("")
 
-        if international:
-            lines.append("[해외]")
-            for i, a in enumerate(international, 1):
-                lines.append(f"{i}. {a['title']}")
-                if a.get("summary"):
-                    lines.append(f"   {a['summary'][:200]}")
-                lines.append(f"   원문: {a['url']}")
-                lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
 
-        if policy:
-            lines.append("[정책·지표]")
-            for i, a in enumerate(policy, 1):
-                lines.append(f"{i}. [{a['source']}] {a['title']}")
-                if a.get("summary"):
-                    lines.append(f"   {a['summary'][:200]}")
-                lines.append(f"   원문: {a['url']}")
-                lines.append("")
+    def _render_category(self, articles: list[dict]) -> str:
+        if self.use_llm:
+            summary = self._summarize_with_llm(articles)
+            if summary:
+                return summary + "\n\n" + _format_sources(articles)
+            # LLM 실패 시 단순 나열로 폴백
+        return _format_plain(articles)
 
-        if reddit:
-            lines.append("[커뮤니티]")
-            for i, a in enumerate(reddit, 1):
-                lines.append(f"{i}. [{a['source']}] {a['title']}")
-                lines.append(f"   링크: {a['url']}")
-                lines.append("")
+    def _summarize_with_llm(self, articles: list[dict]) -> str | None:
+        try:
+            from openai import OpenAI
+        except ImportError:
+            logger.warning("openai package not available; falling back to plain listing")
+            return None
 
-        return "\n".join(lines)
+        user_content = _build_user_prompt(articles)
+        try:
+            client = OpenAI()
+            resp = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            logger.warning("LLM summarization failed, falling back: %s", e)
+            return None
+
+
+def _build_user_prompt(articles: list[dict]) -> str:
+    lines = []
+    for i, a in enumerate(articles, 1):
+        title = a.get("title", "").strip()
+        summary = (a.get("summary", "") or "").strip()[:300]
+        source = a.get("source", "").strip()
+        snippet = f"{i}. [{source}] {title}"
+        if summary:
+            snippet += f" — {summary}"
+        lines.append(snippet)
+    return "\n".join(lines)
+
+
+def _format_sources(articles: list[dict]) -> str:
+    lines = ["주요 출처:"]
+    for i, a in enumerate(articles, 1):
+        lines.append(f"  [{i}] {a['url']}")
+    return "\n".join(lines)
+
+
+def _format_plain(articles: list[dict]) -> str:
+    lines = []
+    for i, a in enumerate(articles, 1):
+        lines.append(f"{i}. [{a.get('source', '')}] {a['title']}")
+        if a.get("summary"):
+            lines.append(f"   {a['summary'][:200]}")
+        lines.append(f"   원문: {a['url']}")
+    return "\n".join(lines)
