@@ -5,6 +5,13 @@ set -euo pipefail
 
 echo "=== msalt-nanobot RPi Setup ==="
 
+# 0. 경로/사용자 자동 탐지
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+RUN_USER="${SUDO_USER:-$USER}"
+echo "  repo dir : ${REPO_DIR}"
+echo "  run user : ${RUN_USER}"
+
 # 1. swap 설정 (1GB)
 # RPi OS면 dphys-swapfile, 그 외(Ubuntu 등)는 /swapfile 방식으로 폴백.
 echo "Setting up 1GB swap..."
@@ -39,7 +46,7 @@ sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
 
 # 3. 프로젝트 설정
 echo "Setting up project..."
-cd /home/pi/msalt-nanobot
+cd "${REPO_DIR}"
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -61,16 +68,30 @@ else
     echo ".env already exists — preserved. If .env.example added new keys, copy them manually."
 fi
 
-# 5. systemd 서비스 등록
+# 5. systemd 유닛 설치 (경로/사용자 템플릿 치환)
+install_unit() {
+    local src="$1"
+    local name
+    name="$(basename "${src}")"
+    local tmp
+    tmp="$(mktemp)"
+    sed \
+        -e "s|^User=.*|User=${RUN_USER}|" \
+        -e "s|/home/pi/msalt-nanobot|${REPO_DIR}|g" \
+        "${src}" > "${tmp}"
+    sudo install -m 0644 "${tmp}" "/etc/systemd/system/${name}"
+    rm -f "${tmp}"
+}
+
 echo "Installing systemd service..."
-sudo cp deploy/msalt-nanobot.service /etc/systemd/system/
+install_unit "${REPO_DIR}/deploy/msalt-nanobot.service"
 sudo systemctl daemon-reload
 sudo systemctl enable msalt-nanobot
 
 # 6. tracking dispatcher timer 등록 (30분 주기)
 echo "Installing tracking dispatcher timer..."
-sudo cp deploy/msalt-tracking-dispatch.service /etc/systemd/system/
-sudo cp deploy/msalt-tracking-dispatch.timer /etc/systemd/system/
+install_unit "${REPO_DIR}/deploy/msalt-tracking-dispatch.service"
+install_unit "${REPO_DIR}/deploy/msalt-tracking-dispatch.timer"
 sudo systemctl daemon-reload
 sudo systemctl enable --now msalt-tracking-dispatch.timer
 

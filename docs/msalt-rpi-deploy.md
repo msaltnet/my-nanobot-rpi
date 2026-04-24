@@ -12,11 +12,15 @@
 
 ### 1. 저장소 클론
 
+어디에 클론하든 무방합니다. RPi OS 기본 예시:
+
 ```bash
 cd /home/pi
 git clone https://github.com/msaltnet/nanobot.git msalt-nanobot
 cd msalt-nanobot
 ```
+
+Ubuntu 등 다른 사용자/경로여도 됩니다 (예: `/home/ubuntu/nanobot`). setup 스크립트가 실제 경로와 현재 사용자를 자동 탐지해 systemd 유닛에 반영합니다.
 
 ### 2. 자동 설정 스크립트 실행
 
@@ -30,7 +34,7 @@ bash deploy/setup-rpi.sh
 - Python 3.11 설치
 - 가상환경 생성 및 `pip install -e .`
 - `.env` 파일 생성 (이미 있으면 보존)
-- `msalt-nanobot.service` systemd 등록 + enable
+- `msalt-nanobot.service` systemd 등록 + enable (경로/사용자 자동 치환)
 - `msalt-tracking-dispatch.timer` 등록 + enable + start (30분 주기)
 
 **스크립트 재실행은 안전합니다.** `.env`는 덮어쓰지 않고, 유닛 파일만 새 버전으로 갱신합니다. 단, **이미 실행 중인 서비스는 자동 재시작되지 않으므로** 유닛 변경을 반영하려면 명시적으로:
@@ -44,10 +48,10 @@ sudo systemctl restart msalt-tracking-dispatch.timer
 
 ### .env 파일
 
-`/home/pi/msalt-nanobot/.env`를 편집합니다. systemd가 `EnvironmentFile`로 자동 로드합니다.
+리포 루트의 `.env`를 편집합니다. systemd가 `EnvironmentFile`로 자동 로드합니다 (경로는 setup 스크립트가 실제 클론 위치로 치환해 둡니다).
 
 ```bash
-nano /home/pi/msalt-nanobot/.env
+nano .env     # 예: /home/pi/msalt-nanobot/.env, /home/ubuntu/nanobot/.env
 ```
 
 ```env
@@ -182,8 +186,8 @@ htop   # 없으면 sudo apt-get install -y htop
 
 ```bash
 journalctl -u msalt-nanobot -n 50 | grep -i "error\|auth\|key"
-cat /home/pi/msalt-nanobot/.env
-sudo systemctl restart msalt-nanobot   # .env 변경 반영
+cat .env                                # 리포 루트에서 실행
+sudo systemctl restart msalt-nanobot    # .env 변경 반영
 ```
 
 ### 텔레그램 연결 문제
