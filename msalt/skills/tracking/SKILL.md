@@ -16,22 +16,25 @@ description: 사용자가 정의한 항목(수면·음주·영어공부 등)에 
 
 ## 처리 절차
 
+**중요**: 반드시 아래의 `msalt-nanobot tracking …` 콘솔 명령을 사용. `python -m msalt.tracking …` / `python3 -m …` 형태는 venv 외부 인터프리터로 풀려 `ModuleNotFoundError`가 난다.
+
 ### 기록 입력
-사용자 발화를 자연어 그대로 다음 명령에 전달. 시점·값 파싱은 내부 LLM 파서가 처리.
+사용자 발화를 자연어 그대로 다음 명령에 전달. agent가 시점·값을 추출해 호출:
 
 ```bash
-# 일반 흐름은 nanobot agent가 직접 NaturalLanguageParser를 호출하는 것이 이상적이지만,
-# 현 구현에서는 agent가 시점·값을 추출한 뒤 CLI로 호출:
-python -m msalt.tracking record <항목명> --date YYYY-MM-DD --num <분 or 양> --raw "<원문>"
-python -m msalt.tracking record <항목명> --date YYYY-MM-DD --bool --raw "<원문>"
-python -m msalt.tracking record <항목명> --date YYYY-MM-DD --text "<자유텍스트>" --raw "<원문>"
+msalt-nanobot tracking record <항목명> --date YYYY-MM-DD --num <분 or 양> --raw "<원문>"
+msalt-nanobot tracking record <항목명> --date YYYY-MM-DD --bool --raw "<원문>"
+msalt-nanobot tracking record <항목명> --date YYYY-MM-DD --no-bool --raw "<원문>"
+msalt-nanobot tracking record <항목명> --date YYYY-MM-DD --text "<자유텍스트>" --raw "<원문>"
 ```
+
+`--bool`은 "함/했음" 기록, `--no-bool`은 "안함/실패" 기록.
 
 ### 항목 추가
 사용자에게 schema/시각 추론 결과를 확인받은 뒤:
 
 ```bash
-python -m msalt.tracking add <이름> <schema> --time HH:MM [--unit <단위>]
+msalt-nanobot tracking add <이름> <schema> --time HH:MM [--unit <단위>]
 ```
 
 확인 흐름 예: "독서 시간도 기록할래" → "이렇게 등록할게: 독서 / duration / 매일 22:00. 맞아?" → "응" → add 실행.
@@ -39,14 +42,14 @@ python -m msalt.tracking add <이름> <schema> --time HH:MM [--unit <단위>]
 ### 조회/통계
 
 ```bash
-python -m msalt.tracking list
-python -m msalt.tracking summary <항목명> --days 7
+msalt-nanobot tracking list
+msalt-nanobot tracking summary <항목명> --days 7
 ```
 
 ### 삭제
 
 ```bash
-python -m msalt.tracking delete <항목명>
+msalt-nanobot tracking delete <항목명>
 ```
 
 ## 응답 가이드

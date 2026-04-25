@@ -119,6 +119,46 @@ def test_gateway_exits_when_env_missing(tmp_path, monkeypatch):
     assert "누락된 환경 변수" in result.stdout
 
 
+def test_tracking_subcommand_passes_argv_to_run_command(monkeypatch):
+    """`msalt-nanobot tracking <args>` 가 args를 그대로 msalt.tracking.cli.run_command로 위임하는지 확인.
+
+    이게 깨지면 봇이 'python3 -m msalt.tracking …' 같은 폴백을 쓰게 되고,
+    Ubuntu 시스템 인터프리터에는 msalt가 없어 ModuleNotFoundError가 난다.
+    """
+    captured: dict = {}
+
+    def fake_run_command(argv):
+        captured["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr("msalt.tracking.cli.run_command", fake_run_command)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "1")
+
+    result = runner.invoke(
+        app,
+        ["tracking", "record", "영어공부", "--date", "2026-04-25",
+         "--bool", "--raw", "영어공부 안함"],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert captured["argv"] == [
+        "record", "영어공부", "--date", "2026-04-25",
+        "--bool", "--raw", "영어공부 안함",
+    ]
+
+
+def test_tracking_subcommand_propagates_nonzero_exit(monkeypatch):
+    monkeypatch.setattr("msalt.tracking.cli.run_command", lambda argv: 2)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "1")
+
+    result = runner.invoke(app, ["tracking", "list"])
+    assert result.exit_code == 2
+
+
 def test_default_invokes_gateway(tmp_path, monkeypatch):
     """인자 없이 실행하면 gateway로 분기되는지 확인."""
     monkeypatch.setattr("msalt.cli.NANOBOT_HOME", tmp_path / "nano")

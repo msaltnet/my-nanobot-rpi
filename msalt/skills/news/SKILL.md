@@ -5,24 +5,25 @@ description: 경제 뉴스를 검색하고 요약합니다. 사용자가 뉴스,
 
 # 뉴스 검색 스킬
 
-사용자가 뉴스나 경제 관련 질문을 하면 shell 도구로 msalt 뉴스 모듈을 실행하세요.
+사용자가 뉴스나 경제 관련 질문을 하면 shell 도구로 아래 콘솔 명령을 실행하세요. `python -m …` / `python3 -m …` 형태는 venv 외부 인터프리터로 풀려 `ModuleNotFoundError`가 나니 금지.
 
 ## 최신 뉴스 브리핑 요청 시
 
 ```bash
-python -m msalt.news.cli briefing
+msalt-nanobot news briefing           # 아침 (기본)
+msalt-nanobot news briefing evening   # 저녁
 ```
 
 ## 키워드로 뉴스 검색 시
 
 ```bash
-python -m msalt.news.cli search "키워드"
+msalt-nanobot news search "키워드"
 ```
 
 ## 뉴스 수집 실행 (수동)
 
 ```bash
-python -m msalt.news.cli collect
+msalt-nanobot news collect
 ```
 
 ## 응답 가이드

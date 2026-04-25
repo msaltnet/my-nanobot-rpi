@@ -260,5 +260,16 @@ def news_search(keyword: str) -> None:
     console.print(run_search(keyword))
 
 
+@app.command(
+    "tracking",
+    help="추적 항목 add/list/delete/record/summary/dispatch.",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def tracking(ctx: typer.Context) -> None:
+    _load_dotenv()
+    from msalt.tracking.cli import run_command
+    raise typer.Exit(code=run_command(ctx.args))
+
+
 if __name__ == "__main__":
     app()
