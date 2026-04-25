@@ -12,7 +12,7 @@
       },
       "payload": {
         "kind": "agent_turn",
-        "message": "아침 경제 브리핑을 만들어서 보내줘. news-briefing 스킬 사용.",
+        "message": "아침 경제 브리핑을 만들어서 보내줘. news-briefing 스킬 사용. 서론·확인 문구 없이 '아침 경제 브리핑' 타이틀부터 바로 시작할 것.",
         "deliver": true,
         "channel": "telegram",
         "to": "${TELEGRAM_USER_ID}"
@@ -33,7 +33,7 @@
       },
       "payload": {
         "kind": "agent_turn",
-        "message": "저녁 경제 브리핑을 만들어서 보내줘. news-briefing 스킬 사용.",
+        "message": "저녁 경제 브리핑을 만들어서 보내줘. news-briefing 스킬 사용. 서론·확인 문구 없이 '저녁 경제 브리핑' 타이틀부터 바로 시작할 것.",
         "deliver": true,
         "channel": "telegram",
         "to": "${TELEGRAM_USER_ID}"
