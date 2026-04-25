@@ -82,6 +82,7 @@ class Dispatcher:
                 scheduled_names.add(it["name"])
 
         missed: list[DispatchMessage] = []
+        missed_item_ids: list[int] = []
         for it in all_items:
             if it["name"] in scheduled_names:
                 continue
@@ -91,12 +92,17 @@ class Dispatcher:
                 continue  # 오늘 슬롯이 아직 안 옴
             if self.records.storage.has_record_since(it["id"], recent_since_utc):
                 continue
+            if it.get("last_missed_asked_date") == today_str:
+                continue  # 오늘 이미 한 번 물어봤음
             missed.append(DispatchMessage(
                 kind="missed", item_name=it["name"],
                 text=_missed_text(it, today_str),
             ))
+            missed_item_ids.append(it["id"])
 
         messages = scheduled + missed
         for msg in messages:
             self.send(msg.text)
+        for item_id in missed_item_ids:
+            self.records.storage.set_last_missed_asked_date(item_id, today_str)
         return messages

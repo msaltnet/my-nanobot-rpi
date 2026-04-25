@@ -30,7 +30,8 @@ class Storage:
                 unit TEXT,
                 schedule_time TEXT NOT NULL,
                 frequency TEXT NOT NULL DEFAULT 'daily',
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_missed_asked_date TEXT
             );
 
             CREATE TABLE IF NOT EXISTS records (
@@ -48,6 +49,11 @@ class Storage:
             CREATE INDEX IF NOT EXISTS idx_records_for ON records(recorded_for);
             CREATE INDEX IF NOT EXISTS idx_records_item ON records(item_id, recorded_for DESC);
         """)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(tracked_items)")}
+        if "last_missed_asked_date" not in cols:
+            conn.execute(
+                "ALTER TABLE tracked_items ADD COLUMN last_missed_asked_date TEXT"
+            )
         conn.commit()
         conn.close()
 
@@ -112,6 +118,17 @@ class Storage:
                 "SELECT * FROM tracked_items ORDER BY name ASC"
             ).fetchall()
             return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def set_last_missed_asked_date(self, item_id: int, date_str: str) -> None:
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE tracked_items SET last_missed_asked_date = ? WHERE id = ?",
+                (date_str, item_id),
+            )
+            conn.commit()
         finally:
             conn.close()
 

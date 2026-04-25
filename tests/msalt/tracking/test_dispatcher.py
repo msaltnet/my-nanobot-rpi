@@ -89,6 +89,30 @@ def test_scheduled_takes_priority_over_missed(setup):
     assert kinds == {"scheduled"}
 
 
+def test_missed_alert_sent_only_once_per_day(setup):
+    """같은 날 두 번 tick해도 missed 알림은 1회만."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "08:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    msgs1 = d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
+    msgs2 = d.run(now=datetime(2026, 4, 14, 14, 30, tzinfo=KST))
+    assert len(msgs1) == 1 and msgs1[0].kind == "missed"
+    assert msgs2 == []
+    assert send.call_count == 1
+
+
+def test_missed_alert_resets_next_day(setup):
+    """다음 날 슬롯이 다시 도래하면 missed 알림이 다시 발송된다."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "08:00")
+    d = Dispatcher(items, records, telegram_send=MagicMock())
+    d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
+    msgs_next_day = d.run(now=datetime(2026, 4, 15, 12, 0, tzinfo=KST))
+    assert len(msgs_next_day) == 1
+    assert msgs_next_day[0].kind == "missed"
+
+
 def test_run_calls_telegram_send_for_each_message(setup):
     _, items, records = setup
     items.add("수면", "duration", None, "08:00")
