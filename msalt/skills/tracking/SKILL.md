@@ -58,3 +58,9 @@ msalt-nanobot tracking delete <항목명>
 - 항목 추가는 반드시 사용자 yes/no 확인 후 실행.
 - 통계는 CLI 출력 그대로 전달하되, 한 줄 코멘트 추가 가능 (단, 평가/훈계 금지).
 - 미확실하면 묻는다. 추측하지 않는다.
+
+## 절대 금지
+
+- **워크스페이스 파일·메모·임시 텍스트로 기록을 대체하지 말 것.** 기록의 단일 진실은 SQLite DB(`~/.nanobot/workspace/msalt.db`)이며, 진입점은 위의 `msalt-nanobot tracking record …` 뿐이다.
+- `write_file`, `append_file` 등으로 `~/.nanobot/workspace/`에 자작 기록 파일을 만들지 말 것. "기록 완료"라고 답해도 DB에 안 들어가면 거짓 응답이다.
+- CLI 호출이 실패하면 **에러 원문과 실행한 명령을 그대로 사용자에게 보여주고 멈춘다.** 사용자가 명시적으로 다른 저장 방식을 지시하기 전까지는 우회 금지.
