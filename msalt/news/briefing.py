@@ -12,10 +12,9 @@ CATEGORY_LABELS = {
     "domestic": "국내",
     "international": "해외",
     "policy": "정책·지표",
-    "reddit": "커뮤니티",
 }
 
-CATEGORY_ORDER = ["domestic", "international", "policy", "reddit"]
+CATEGORY_ORDER = ["domestic", "international", "policy"]
 
 SYSTEM_PROMPT = (
     "당신은 한국어 경제 뉴스 편집자다. 주어진 기사 목록을 읽고 "

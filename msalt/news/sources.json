@@ -26,34 +26,6 @@
       "category": "international"
     },
     {
-      "name": "r/economics",
-      "url": "https://www.reddit.com/r/economics/hot/.rss",
-      "category": "reddit",
-      "limit": 10,
-      "skip_title_patterns": ["Daily", "Weekly", "Megathread", "Meta", "Moronic", "Rate My"]
-    },
-    {
-      "name": "r/StockMarket",
-      "url": "https://www.reddit.com/r/StockMarket/hot/.rss",
-      "category": "reddit",
-      "limit": 10,
-      "skip_title_patterns": ["Daily", "Weekly", "Megathread", "Meta", "Moronic", "Rate My"]
-    },
-    {
-      "name": "r/investing",
-      "url": "https://www.reddit.com/r/investing/hot/.rss",
-      "category": "reddit",
-      "limit": 10,
-      "skip_title_patterns": ["Daily", "Weekly", "Megathread", "Meta", "Moronic", "Rate My"]
-    },
-    {
-      "name": "r/stocks",
-      "url": "https://www.reddit.com/r/stocks/hot/.rss",
-      "category": "reddit",
-      "limit": 10,
-      "skip_title_patterns": ["Daily", "Weekly", "Megathread", "Meta", "Moronic", "Rate My"]
-    },
-    {
       "name": "Fed Monetary Policy",
       "url": "https://www.federalreserve.gov/feeds/press_monetary.xml",
       "category": "policy"

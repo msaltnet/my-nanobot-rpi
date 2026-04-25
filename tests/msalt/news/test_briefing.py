@@ -25,19 +25,6 @@ def test_format_briefing_plain_mode(mock_storage):
     assert "Fed holds rates" in text
 
 
-def test_format_briefing_includes_reddit_section():
-    storage = MagicMock()
-    storage.get_articles_since.return_value = [
-        {"source": "한경", "title": "국내 이슈", "url": "https://hk.com/1", "summary": "요약", "category": "domestic", "collected_at": "2026-04-21 07:00:00"},
-        {"source": "r/economics", "title": "Fed pivot", "url": "https://reddit.com/r/economics/1", "summary": "", "category": "reddit", "collected_at": "2026-04-21 07:00:00"},
-    ]
-    gen = BriefingGenerator(storage=storage, use_llm=False)
-    text = gen.format_briefing("morning")
-    assert "[커뮤니티]" in text
-    assert "r/economics" in text
-    assert "Fed pivot" in text
-
-
 def test_format_briefing_includes_policy_section():
     storage = MagicMock()
     storage.get_articles_since.return_value = [
