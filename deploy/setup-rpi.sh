@@ -95,6 +95,14 @@ install_unit "${REPO_DIR}/deploy/msalt-tracking-dispatch.timer"
 sudo systemctl daemon-reload
 sudo systemctl enable --now msalt-tracking-dispatch.timer
 
+# 7. telegram 채널 좀비 watchdog (5분 주기)
+echo "Installing telegram channel watchdog..."
+chmod +x "${REPO_DIR}/deploy/check-telegram-channel.sh"
+install_unit "${REPO_DIR}/deploy/msalt-nanobot-watchdog.service"
+install_unit "${REPO_DIR}/deploy/msalt-nanobot-watchdog.timer"
+sudo systemctl daemon-reload
+sudo systemctl enable --now msalt-nanobot-watchdog.timer
+
 echo "=== Setup complete! ==="
 echo "1. Edit .env with your API keys (TELEGRAM_USER_ID must be numeric)"
 echo "2. msalt-nanobot doctor  # verify env, auto-seed config/workspace/skills/cron"

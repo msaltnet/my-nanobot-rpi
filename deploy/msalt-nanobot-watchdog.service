@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart msalt-nanobot if telegram channel is zombie
+After=msalt-nanobot.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/msalt-nanobot/deploy/check-telegram-channel.sh
+StandardOutput=journal
+StandardError=journal
