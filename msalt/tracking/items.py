@@ -13,7 +13,7 @@ TIME_RE: Final = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 DEFAULT_SEEDS: Final = [
     {"name": "수면", "schema": "duration", "unit": None, "schedule_time": "08:00"},
     {"name": "음주", "schema": "quantity", "unit": "잔", "schedule_time": "22:00"},
-    {"name": "영어공부", "schema": "duration", "unit": None, "schedule_time": "22:00"},
+    {"name": "영어공부", "schema": "boolean", "unit": None, "schedule_time": "22:00"},
 ]
 
 
