@@ -252,3 +252,32 @@ sudo dphys-swapfile swapon
 - RSS 소스 점검: `msalt-nanobot doctor`
 - 수동 수집: `msalt-nanobot news collect`
 - 수동 브리핑: `msalt-nanobot news briefing morning`
+
+### LLM이 `msalt-nanobot tracking ...` 호출 시 `command not found` (exit 127)
+
+봇이 추적 기록을 시도하다 실패하고 다음 같은 에러를 그대로 보여주는 경우:
+
+```
+STDERR:
+/usr/bin/bash: line 1: msalt-nanobot: command not found
+Exit code: 127
+```
+
+**원인**: nanobot의 exec 도구는 secrets 누출 방지를 위해 LLM이 만든 명령에 부모 프로세스의 PATH를 전달하지 않습니다. 따라서 venv bin이 자식 bash의 PATH에 들어가지 않아 `msalt-nanobot` 실행파일을 못 찾습니다.
+
+**해결**: `~/.nanobot/config.json`의 `tools.exec.path_append`에 venv bin 절대경로를 박습니다. 새 배포는 `setup-rpi.sh`가 자동 처리합니다. 이미 설치된 경우 수동으로:
+
+```bash
+# 리포 루트에서 실행
+.venv/bin/python - <<'PY'
+import json
+from pathlib import Path
+cfg = Path.home() / '.nanobot' / 'config.json'
+data = json.loads(cfg.read_text(encoding='utf-8'))
+desired = str(Path.cwd() / '.venv' / 'bin')
+data.setdefault('tools', {}).setdefault('exec', {})['path_append'] = desired
+cfg.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+print(f'patched tools.exec.path_append -> {desired}')
+PY
+sudo systemctl restart msalt-nanobot
+```

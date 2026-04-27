@@ -38,7 +38,8 @@
     },
     "exec": {
       "enable": true,
-      "timeout": 30
+      "timeout": 30,
+      "path_append": ""
     }
   }
 }

@@ -68,6 +68,30 @@ else
     echo ".env already exists — preserved. If .env.example added new keys, copy them manually."
 fi
 
+# 4-1. nanobot config seed + tools.exec.path_append를 venv bin으로 패치
+# nanobot exec 도구는 secrets 누출 방지를 위해 부모 PATH를 상속하지 않는다 (shell.py _build_env).
+# 따라서 venv bin을 path_append에 명시해야 LLM이 'msalt-nanobot tracking ...' 등을 호출할 수 있다.
+echo "Seeding ~/.nanobot config and patching path_append..."
+VENV_BIN="${REPO_DIR}/.venv/bin"
+sudo -u "${RUN_USER}" -H "${VENV_BIN}/python" - <<PYEOF
+import json
+from pathlib import Path
+from msalt.cli import _seed_if_missing
+created = _seed_if_missing()
+for p in created:
+    print(f'+ seed: {p}')
+cfg_path = Path.home() / '.nanobot' / 'config.json'
+data = json.loads(cfg_path.read_text(encoding='utf-8'))
+exec_cfg = data.setdefault('tools', {}).setdefault('exec', {})
+desired = '${VENV_BIN}'
+if exec_cfg.get('path_append') != desired:
+    exec_cfg['path_append'] = desired
+    cfg_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+    print(f'+ patched tools.exec.path_append -> {desired}')
+else:
+    print(f'= tools.exec.path_append already correct: {desired}')
+PYEOF
+
 # 5. systemd 유닛 설치 (경로/사용자 템플릿 치환)
 install_unit() {
     local src="$1"
