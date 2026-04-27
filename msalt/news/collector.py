@@ -26,6 +26,7 @@ class NewsCollector:
                 url=article["url"],
                 summary=article["summary"],
                 category=article["category"],
+                published_at=article.get("published_at"),
             )
             count += 1
 

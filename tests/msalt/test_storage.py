@@ -51,6 +51,92 @@ def test_get_articles_since_filters_by_date(db):
     assert len(articles) == 0
 
 
+def test_insert_article_stores_published_at(db):
+    db.insert_article(
+        "src", "t", "https://e.com/1", "s", "domestic",
+        published_at="2026-04-12 09:00:00",
+    )
+    articles = db.get_articles_since("2020-01-01")
+    assert articles[0]["published_at"] == "2026-04-12 09:00:00"
+
+
+def test_insert_article_published_at_optional(db):
+    db.insert_article("src", "t", "https://e.com/1", "s", "domestic")
+    articles = db.get_articles_since("2020-01-01")
+    assert articles[0]["published_at"] is None
+
+
+def test_get_articles_since_uses_published_at_when_present(db):
+    """published_at이 있으면 그것을, 없으면 collected_at을 비교 대상으로 쓴다.
+
+    아래는 RSS가 옛 기사를 새로 노출시킨 시나리오 — collected_at은 '지금'(SQLite
+    datetime('now') = UTC) 이지만 published_at은 한참 전이라 윈도우에서 자연 컷된다.
+    """
+    db.insert_article(
+        "src", "옛 기사", "https://old.com", "s", "domestic",
+        published_at="2020-01-01 00:00:00",
+    )
+    db.insert_article(
+        "src", "최근 기사", "https://new.com", "s", "domestic",
+        published_at="2099-01-01 00:00:00",
+    )
+    # 2025년 이후만
+    articles = db.get_articles_since("2025-01-01 00:00:00")
+    titles = [a["title"] for a in articles]
+    assert "최근 기사" in titles
+    assert "옛 기사" not in titles
+
+
+def test_get_articles_since_require_published_at_excludes_null(db):
+    db.insert_article(
+        "src", "발행일 있음", "https://a.com", "s", "domestic",
+        published_at="2099-01-01 00:00:00",
+    )
+    db.insert_article("src", "발행일 미상", "https://b.com", "s", "domestic")
+    articles = db.get_articles_since("2020-01-01", require_published_at=True)
+    titles = [a["title"] for a in articles]
+    assert "발행일 있음" in titles
+    assert "발행일 미상" not in titles
+
+
+def test_storage_initialize_migrates_existing_db_without_published_at(tmp_path):
+    """이미 배포된 DB(컬럼 없음)에 initialize()가 ALTER로 컬럼을 추가한다."""
+    db_path = tmp_path / "legacy.db"
+    # 옛 스키마로 직접 생성 (published_at 없음)
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE news_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            title TEXT NOT NULL,
+            url TEXT UNIQUE NOT NULL,
+            summary TEXT,
+            category TEXT,
+            collected_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "INSERT INTO news_articles (source, title, url, summary, category) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("src", "기존", "https://e.com/1", "s", "domestic"),
+    )
+    conn.commit()
+    conn.close()
+
+    storage = Storage(str(db_path))
+    storage.initialize()  # ALTER 마이그레이션 실행
+
+    cols = {row[1] for row in sqlite3.connect(db_path).execute(
+        "PRAGMA table_info(news_articles)"
+    )}
+    assert "published_at" in cols
+    # 기존 행 보존, 새 컬럼은 NULL
+    articles = storage.get_articles_since("2020-01-01")
+    assert len(articles) == 1
+    assert articles[0]["title"] == "기존"
+    assert articles[0]["published_at"] is None
+
+
 def test_storage_does_not_expose_lifestyle_methods():
     from msalt.storage import Storage
     legacy = ["upsert_sleep", "get_sleep_log", "get_sleep_logs_since",

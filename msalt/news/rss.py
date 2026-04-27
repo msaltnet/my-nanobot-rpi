@@ -1,6 +1,8 @@
+import calendar
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import feedparser
@@ -62,6 +64,7 @@ class RssCollector:
                 "summary": entry.get("summary", ""),
                 "category": source["category"],
                 "published": entry.get("published", ""),
+                "published_at": _normalize_published(entry),
             })
             if limit and len(articles) >= limit:
                 break
@@ -82,3 +85,25 @@ class RssCollector:
 
 def _matches_any(title: str, patterns: list[str]) -> bool:
     return any(re.search(p, title, re.IGNORECASE) for p in patterns)
+
+
+def _normalize_published(entry) -> str | None:
+    """RSS entry의 발행일을 'YYYY-MM-DD HH:MM:SS' UTC 문자열로 정규화.
+
+    feedparser는 RFC 822/8601 등 다양한 포맷을 ``published_parsed`` (struct_time, UTC)
+    로 파싱해 두기 때문에 그걸 1순위로 쓴다. 없으면 ``updated_parsed``로 폴백.
+    parser가 실패해 둘 다 ``None``이거나 미래 시각이면 ``None``을 반환 — 브리핑에서
+    NULL 처리되어 신뢰 못 할 항목으로 분류된다.
+    """
+    parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
+    if not parsed:
+        return None
+    try:
+        ts = calendar.timegm(parsed)  # struct_time (UTC) → epoch
+    except (TypeError, ValueError, OverflowError):
+        return None
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    # 미래 시각(피드 타임존 오류로 종종 나옴) — 신뢰 못 하므로 NULL
+    if dt > datetime.now(timezone.utc):
+        return None
+    return dt.strftime("%Y-%m-%d %H:%M:%S")

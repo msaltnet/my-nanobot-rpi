@@ -20,7 +20,8 @@ class Storage:
                 url TEXT UNIQUE NOT NULL,
                 summary TEXT,
                 category TEXT,
-                collected_at TEXT NOT NULL DEFAULT (datetime('now'))
+                collected_at TEXT NOT NULL DEFAULT (datetime('now')),
+                published_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS tracked_items (
@@ -54,6 +55,9 @@ class Storage:
             conn.execute(
                 "ALTER TABLE tracked_items ADD COLUMN last_missed_asked_date TEXT"
             )
+        article_cols = {row[1] for row in conn.execute("PRAGMA table_info(news_articles)")}
+        if "published_at" not in article_cols:
+            conn.execute("ALTER TABLE news_articles ADD COLUMN published_at TEXT")
         conn.commit()
         conn.close()
 
@@ -63,25 +67,53 @@ class Storage:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
-    def insert_article(self, source: str, title: str, url: str, summary: str, category: str):
+    def insert_article(
+        self,
+        source: str,
+        title: str,
+        url: str,
+        summary: str,
+        category: str,
+        published_at: str | None = None,
+    ):
         conn = self._connect()
         try:
             conn.execute(
-                "INSERT OR IGNORE INTO news_articles (source, title, url, summary, category) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (source, title, url, summary, category),
+                "INSERT OR IGNORE INTO news_articles "
+                "(source, title, url, summary, category, published_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (source, title, url, summary, category, published_at),
             )
             conn.commit()
         finally:
             conn.close()
 
-    def get_articles_since(self, since_date: str) -> list[dict]:
+    def get_articles_since(
+        self,
+        since_date: str,
+        *,
+        require_published_at: bool = False,
+    ) -> list[dict]:
+        """발행일 또는 수집일 기준 ``since_date`` 이후 기사를 반환.
+
+        ``published_at``이 있으면 그것을, 없으면 ``collected_at``을 비교 대상으로 쓴다.
+        ``require_published_at=True``이면 ``published_at IS NULL``인 행은 제외한다.
+        """
         conn = self._connect()
         try:
-            cursor = conn.execute(
-                "SELECT * FROM news_articles WHERE collected_at >= ? ORDER BY collected_at DESC",
-                (since_date,),
-            )
+            if require_published_at:
+                sql = (
+                    "SELECT * FROM news_articles "
+                    "WHERE published_at IS NOT NULL AND published_at >= ? "
+                    "ORDER BY published_at DESC"
+                )
+            else:
+                sql = (
+                    "SELECT * FROM news_articles "
+                    "WHERE COALESCE(published_at, collected_at) >= ? "
+                    "ORDER BY COALESCE(published_at, collected_at) DESC"
+                )
+            cursor = conn.execute(sql, (since_date,))
             return [dict(row) for row in cursor.fetchall()]
         finally:
             conn.close()

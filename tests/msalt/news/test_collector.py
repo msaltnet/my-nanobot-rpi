@@ -23,6 +23,7 @@ def test_collect_all_stores_articles(MockRss, mock_storage):
             "summary": "요약",
             "category": "domestic",
             "published": "2026-04-12",
+            "published_at": "2026-04-12 09:00:00",
         }
     ]
 
@@ -35,6 +36,33 @@ def test_collect_all_stores_articles(MockRss, mock_storage):
         url="https://example.com/1",
         summary="요약",
         category="domestic",
+        published_at="2026-04-12 09:00:00",
+    )
+
+
+@patch("msalt.news.collector.RssCollector")
+def test_collect_passes_none_when_published_at_missing(MockRss, mock_storage):
+    mock_rss = MockRss.return_value
+    mock_rss.collect_all.return_value = [
+        {
+            "source": "a",
+            "title": "t",
+            "url": "https://1.com",
+            "summary": "s",
+            "category": "domestic",
+            "published": "",
+            # published_at 누락 (RSS 메타 없는 케이스)
+        }
+    ]
+    collector = NewsCollector(storage=mock_storage, sources_path="dummy.json")
+    collector.collect()
+    mock_storage.insert_article.assert_called_once_with(
+        source="a",
+        title="t",
+        url="https://1.com",
+        summary="s",
+        category="domestic",
+        published_at=None,
     )
 
 
@@ -42,8 +70,8 @@ def test_collect_all_stores_articles(MockRss, mock_storage):
 def test_collect_returns_count(MockRss, mock_storage):
     mock_rss = MockRss.return_value
     mock_rss.collect_all.return_value = [
-        {"source": "a", "title": "t1", "url": "https://1.com", "summary": "s", "category": "domestic", "published": ""},
-        {"source": "b", "title": "t2", "url": "https://2.com", "summary": "s", "category": "international", "published": ""},
+        {"source": "a", "title": "t1", "url": "https://1.com", "summary": "s", "category": "domestic", "published": "", "published_at": None},
+        {"source": "b", "title": "t2", "url": "https://2.com", "summary": "s", "category": "international", "published": "", "published_at": None},
     ]
 
     collector = NewsCollector(storage=mock_storage, sources_path="dummy.json")

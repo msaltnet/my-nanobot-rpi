@@ -1,8 +1,9 @@
+import time
 from unittest.mock import patch, MagicMock
 
 import httpx
 
-from msalt.news.rss import RssCollector
+from msalt.news.rss import RssCollector, _normalize_published
 
 
 def _mock_response(body: bytes = b"<rss/>") -> MagicMock:
@@ -12,24 +13,42 @@ def _mock_response(body: bytes = b"<rss/>") -> MagicMock:
     return resp
 
 
+def _entry_obj(
+    title: str,
+    link: str,
+    *,
+    summary: str = "",
+    published: str = "",
+    published_parsed=None,
+    updated_parsed=None,
+) -> MagicMock:
+    """feedparser entry 흉내. MagicMock 자동 속성으로 인한 truthy published_parsed
+    오염을 막기 위해 명시 속성만 노출한다."""
+    e = MagicMock(spec=["title", "link", "get", "published_parsed", "updated_parsed"])
+    e.title = title
+    e.link = link
+    e.published_parsed = published_parsed
+    e.updated_parsed = updated_parsed
+    e.get = lambda key, default="": {"summary": summary, "published": published}.get(key, default)
+    return e
+
+
 MOCK_FEED = MagicMock()
 MOCK_FEED.bozo = False
 MOCK_FEED.entries = [
-    MagicMock(
-        title="경제 성장률 전망",
-        link="https://example.com/article1",
-        get=lambda key, default="": {
-            "summary": "2분기 경제 성장률이 상승할 것으로 전망된다.",
-            "published": "Sat, 12 Apr 2026 09:00:00 GMT",
-        }.get(key, default),
+    _entry_obj(
+        "경제 성장률 전망",
+        "https://example.com/article1",
+        summary="2분기 경제 성장률이 상승할 것으로 전망된다.",
+        published="Sat, 12 Apr 2026 09:00:00 GMT",
+        published_parsed=time.struct_time((2026, 4, 12, 9, 0, 0, 5, 102, 0)),
     ),
-    MagicMock(
-        title="금리 동결 결정",
-        link="https://example.com/article2",
-        get=lambda key, default="": {
-            "summary": "한국은행이 기준금리를 동결했다.",
-            "published": "Sat, 12 Apr 2026 10:00:00 GMT",
-        }.get(key, default),
+    _entry_obj(
+        "금리 동결 결정",
+        "https://example.com/article2",
+        summary="한국은행이 기준금리를 동결했다.",
+        published="Sat, 12 Apr 2026 10:00:00 GMT",
+        published_parsed=time.struct_time((2026, 4, 12, 10, 0, 0, 5, 102, 0)),
     ),
 ]
 
@@ -45,6 +64,9 @@ def test_collect_from_source(mock_parse, mock_get):
     assert articles[0]["url"] == "https://example.com/article1"
     assert articles[0]["source"] == "테스트"
     assert articles[0]["category"] == "domestic"
+    # published_parsed가 UTC ISO 문자열로 정규화되어 들어가야 한다
+    assert articles[0]["published_at"] == "2026-04-12 09:00:00"
+    assert articles[1]["published_at"] == "2026-04-12 10:00:00"
 
 
 @patch("msalt.news.rss.httpx.get", return_value=_mock_response())
@@ -70,12 +92,7 @@ def test_collect_from_source_handles_http_error(mock_get):
 
 
 def _entry(title: str, link: str) -> MagicMock:
-    e = MagicMock(
-        title=title,
-        link=link,
-        get=lambda key, default="": {"summary": "", "published": ""}.get(key, default),
-    )
-    return e
+    return _entry_obj(title, link)
 
 
 @patch("msalt.news.rss.httpx.get", return_value=_mock_response())
@@ -128,3 +145,25 @@ def test_load_sources(tmp_path):
     sources = collector.load_sources()
     assert len(sources) == 1
     assert sources[0]["name"] == "Test"
+
+
+def test_normalize_published_uses_published_parsed():
+    e = _entry_obj("t", "u", published_parsed=time.struct_time((2026, 4, 12, 9, 0, 0, 5, 102, 0)))
+    assert _normalize_published(e) == "2026-04-12 09:00:00"
+
+
+def test_normalize_published_falls_back_to_updated_parsed():
+    e = _entry_obj("t", "u", updated_parsed=time.struct_time((2026, 4, 12, 9, 0, 0, 5, 102, 0)))
+    assert _normalize_published(e) == "2026-04-12 09:00:00"
+
+
+def test_normalize_published_returns_none_when_missing():
+    e = _entry_obj("t", "u")  # 둘 다 None
+    assert _normalize_published(e) is None
+
+
+def test_normalize_published_drops_future_dates():
+    """피드 타임존 오류로 미래 시각이 들어오면 신뢰 못 함 → None."""
+    far_future = time.struct_time((2099, 1, 1, 0, 0, 0, 0, 1, 0))
+    e = _entry_obj("t", "u", published_parsed=far_future)
+    assert _normalize_published(e) is None

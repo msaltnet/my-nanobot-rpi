@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gpt-5-mini"
 MAX_ARTICLES_PER_CATEGORY = 10
+DEFAULT_WINDOW_HOURS = 36  # 저녁 브리핑이 어제 저녁부터 오늘까지를 커버
 
 CATEGORY_LABELS = {
     "domestic": "국내",
@@ -44,10 +45,23 @@ class BriefingGenerator:
         self.use_llm = use_llm
         self.model = model
 
-    def get_articles_for_briefing(self, hours: int = 12) -> list[dict]:
-        # collected_at은 SQLite datetime('now') = UTC로 저장되므로 비교도 UTC로 맞춘다.
+    def get_articles_for_briefing(
+        self,
+        hours: int = DEFAULT_WINDOW_HOURS,
+        *,
+        require_published_at: bool = True,
+    ) -> list[dict]:
+        """``hours`` 시간 이내 기사를 반환.
+
+        기본은 ``published_at``(RSS가 알려준 실제 발행 시각) 기준이며, 발행일이 없는
+        항목은 제외한다. RSS 피드가 옛 기사를 카테고리 페이지에 다시 노출시키더라도
+        published_at은 원본 시각이라 윈도우 밖이면 자연 컷.
+        """
+        # SQLite datetime('now') = UTC, RSS published_at도 UTC로 정규화되어 들어옴.
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
-        articles = self.storage.get_articles_since(since)
+        articles = self.storage.get_articles_since(
+            since, require_published_at=require_published_at
+        )
         seen_urls = set()
         unique = []
         for article in articles:
@@ -113,7 +127,11 @@ def _build_user_prompt(articles: list[dict]) -> str:
         title = a.get("title", "").strip()
         summary = (a.get("summary", "") or "").strip()[:300]
         source = a.get("source", "").strip()
-        snippet = f"{i}. [{source}] {title}"
+        published = (a.get("published_at") or "").strip()
+        prefix = f"{i}. [{source}]"
+        if published:
+            prefix += f" ({published} UTC)"
+        snippet = f"{prefix} {title}"
         if summary:
             snippet += f" — {summary}"
         lines.append(snippet)
