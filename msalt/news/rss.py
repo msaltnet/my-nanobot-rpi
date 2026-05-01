@@ -15,12 +15,16 @@ logger = logging.getLogger(__name__)
 USER_AGENT = "Mozilla/5.0 (compatible; msalt-nanobot/1.0)"
 REQUEST_TIMEOUT = 10.0
 
+# 패키지 내부에 동봉된 기본 sources.json. nanobot ExecTool은 자식 셸의 cwd를
+# ~/.nanobot/workspace로 강제해서 상대 경로가 깨지므로, 절대 경로를 기본값으로 쓴다.
+DEFAULT_SOURCES_PATH = str(Path(__file__).resolve().parent / "sources.json")
+
 
 class RssCollector:
     """RSS/Atom 피드에서 뉴스 기사를 수집한다."""
 
-    def __init__(self, sources_path: str = "msalt/news/sources.json"):
-        self.sources_path = sources_path
+    def __init__(self, sources_path: str | None = None):
+        self.sources_path = sources_path or DEFAULT_SOURCES_PATH
 
     def load_sources(self) -> list[dict]:
         path = Path(self.sources_path)

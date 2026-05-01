@@ -1,6 +1,6 @@
 import logging
 
-from msalt.news.rss import RssCollector
+from msalt.news.rss import DEFAULT_SOURCES_PATH, RssCollector
 from msalt.storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 class NewsCollector:
     """RSS에서 뉴스를 수집하여 저장소에 저장한다."""
 
-    def __init__(self, storage: Storage, sources_path: str = "msalt/news/sources.json"):
+    def __init__(self, storage: Storage, sources_path: str | None = None):
         self.storage = storage
-        self.sources_path = sources_path
-        self.rss = RssCollector(sources_path=sources_path)
+        self.sources_path = sources_path or DEFAULT_SOURCES_PATH
+        self.rss = RssCollector(sources_path=self.sources_path)
 
     def collect(self) -> int:
         """모든 소스에서 뉴스를 수집하고 저장한다. 수집된 기사 수를 반환."""
