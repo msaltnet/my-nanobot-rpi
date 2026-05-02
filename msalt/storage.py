@@ -55,6 +55,15 @@ class Storage:
             conn.execute(
                 "ALTER TABLE tracked_items ADD COLUMN last_missed_asked_date TEXT"
             )
+            cols.add("last_missed_asked_date")
+        if "pending_since" not in cols:
+            conn.execute(
+                "ALTER TABLE tracked_items ADD COLUMN pending_since TEXT"
+            )
+        if "last_asked_at" not in cols:
+            conn.execute(
+                "ALTER TABLE tracked_items ADD COLUMN last_asked_at TEXT"
+            )
         article_cols = {row[1] for row in conn.execute("PRAGMA table_info(news_articles)")}
         if "published_at" not in article_cols:
             conn.execute("ALTER TABLE news_articles ADD COLUMN published_at TEXT")
