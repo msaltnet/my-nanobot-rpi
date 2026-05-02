@@ -47,8 +47,10 @@ sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
 # 3. 프로젝트 설정
 echo "Setting up project..."
 cd "${REPO_DIR}"
+git submodule update --init --recursive
 python3.11 -m venv .venv
 source .venv/bin/activate
+pip install -e ./nanobot        # upstream nanobot (submodule)
 pip install -e .
 
 # 4. .env 파일 생성 (사용자가 직접 편집)
