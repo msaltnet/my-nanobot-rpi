@@ -60,6 +60,23 @@ msalt-nanobot tracking summary <항목명> --days 7
 msalt-nanobot tracking delete <항목명>
 ```
 
+### 묶음 알림에 답하기
+
+dispatcher가 여러 항목을 한 메시지로 묶어 보낼 수 있다. 예:
+
+```
+📝 기록할 항목 3개:
+1. 수면 — 몇 시간/얼마나?
+2. 음주 — 몇 잔?
+3. 영어공부 — 했어?
+```
+
+사용자가 `"7시간 잤고 2잔 마셨어, 영어 했어"` 같이 한 번에 답하면 **각 항목별로 record CLI를 한 번씩 호출**한다. 부분 답("수면만 7시간")이면 매칭된 항목만 기록하고 나머지는 건드리지 않는다 (다음 retry 슬롯에서 다시 묻게 됨).
+
+### boolean 부정 답
+
+boolean schema 항목에서 사용자가 "아니" / "안 했어" / "no" / "패스" 등 부정 의미를 표현하면 `--no-bool`로 기록한다. 예: "영어공부 안 했어" → `msalt-nanobot tracking record 영어공부 --date YYYY-MM-DD --no-bool --raw "영어공부 안 했어"`.
+
 ## 응답 가이드
 
 - 자연어 시점 표현은 절대 날짜로 변환해 사용자에게 다시 확인.
