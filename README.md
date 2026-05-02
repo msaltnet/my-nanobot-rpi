@@ -90,18 +90,37 @@ msalt/
 ## 시작하기
 
 ```bash
-# 1. 설치
-pip install -e .
+# 1. 클론 (submodule 포함)
+git clone --recursive https://github.com/msaltnet/my-nanobot-rpi.git
+cd my-nanobot-rpi
 
-# 2. 환경 변수 설정
+# 기존 클론이면 submodule 초기화
+git submodule update --init --recursive
+
+# 2. 설치 (nanobot + msalt)
+pip install -e ./nanobot      # upstream nanobot 프레임워크
+pip install -e .              # msalt-nanobot
+
+# 3. 환경 변수 설정
 cp .env.example .env
 # .env 편집 — 3개 값 입력:
 #   OPENAI_API_KEY=sk-...
 #   TELEGRAM_BOT_TOKEN=... (@BotFather)
 #   TELEGRAM_USER_ID=...   (@userinfobot, 숫자 ID)
 
-# 3. 기동 — .env 자동 로드, config·workspace 자동 seed
+# 4. 기동 — .env 자동 로드, config·workspace 자동 seed
 msalt-nanobot
+```
+
+### nanobot 업데이트
+
+```bash
+cd nanobot
+git fetch origin
+git checkout v0.x.x           # 원하는 버전 태그
+cd ..
+git add nanobot
+git commit -m "chore: update nanobot submodule to vX.X.X"
 ```
 
 **서브커맨드**

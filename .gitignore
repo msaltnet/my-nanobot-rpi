@@ -1,27 +1,28 @@
-.worktrees/
-.assets
-.docs
-.env
-.web
+# Python
 *.pyc
-dist/
-build/
-*.egg-info/
-*.egg
-*.pycs
 *.pyo
 *.pyd
-*.pyw
-*.pyz
-*.pywz
-*.pyzz
+*.egg
+*.egg-info/
+dist/
+build/
+__pycache__/
+.pytest_cache/
+
+# Virtual environments
 .venv/
 venv/
-__pycache__/
-poetry.lock
-.pytest_cache/
+
+# Environment
+.env
+
+# IDE / Editor
+.DS_Store
+.claude
+.worktrees/
+
+# Misc
 botpy.log
 nano.*.save
-.DS_Store
 uv.lock
-.claude
+poetry.lock
