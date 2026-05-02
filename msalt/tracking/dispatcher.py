@@ -1,4 +1,4 @@
-"""디스패처: 시각 도래 / 누락 항목 검출 후 batch로 텔레그램 발송."""
+"""디스패처: schedule 슬롯 도래 + pending 항목 retry를 batch로 텔레그램 발송."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -133,7 +133,7 @@ class Dispatcher:
                     storage.clear_pending(it["id"])
                     it["pending_since"] = None
 
-            # 3. 첫 알림 — schedule_time이 오늘의 [window_start, now] 윈도우 안
+            # 3. 첫 알림 — schedule_time이 오늘의 (window_start, now] 윈도우 안
             h, m = _parse_hhmm(it["schedule_time"])
             slot_today_kst = now_kst.replace(hour=h, minute=m, second=0, microsecond=0)
             if window_start_kst < slot_today_kst <= now_kst:
