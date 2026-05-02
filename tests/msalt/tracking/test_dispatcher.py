@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 import pytest
@@ -6,7 +6,7 @@ import pytest
 from msalt.storage import Storage
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.records import RecordManager
-from msalt.tracking.dispatcher import Dispatcher, DispatchMessage
+from msalt.tracking.dispatcher import Dispatcher
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -22,103 +22,187 @@ def setup(tmp_path):
     return s, items, records
 
 
+def _kst(y, m, d, h, mi):
+    return datetime(y, m, d, h, mi, tzinfo=KST)
+
+
+# --- 기본 동작 ---
+
+
 def test_no_items_no_messages(setup):
     _, items, records = setup
     d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 8, 0, tzinfo=KST))
+    msgs = d.run(now=_kst(2026, 5, 2, 9, 0))
     assert msgs == []
 
 
-def test_scheduled_item_within_window_triggers_question(setup):
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 8, 5, tzinfo=KST))
-    assert len(msgs) == 1
-    assert msgs[0].kind == "scheduled"
-    assert msgs[0].item_name == "수면"
-
-
-def test_outside_window_no_scheduled_message(setup):
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 7, 30, tzinfo=KST))
-    # 7:30 → 다음 슬롯은 7:30, 윈도우는 [7:30, 8:00). 8:00은 미포함.
-    assert all(m.item_name != "수면" for m in msgs if m.kind == "scheduled")
-
-
-def test_missed_item_after_schedule_triggers_alert(setup):
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
-    assert len(msgs) == 1
-    assert msgs[0].kind == "missed"
-    assert msgs[0].item_name == "수면"
-
-
-def test_recorded_item_no_missed_alert(setup):
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    records.upsert("수면", "2026-04-14", value_num=480, raw_input="8h")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
-    assert msgs == []
-
-
-def test_overnight_recorded_for_yesterday_skips_missed(setup):
-    """오버나잇 항목(수면 08:00)을 오늘 아침에 어제 날짜로 기록해도
-    오늘의 미기록 알림은 더 이상 뜨지 않아야 한다 (최근 24h 내 입력)."""
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    # 어제 날짜로 기록 (recorded_at은 자동으로 지금 시각 = 2026-04-14 근방)
-    records.upsert("수면", "2026-04-13", value_num=480, raw_input="8h")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
-    assert msgs == []
-
-
-def test_scheduled_takes_priority_over_missed(setup):
-    """같은 회차에 scheduled로 잡히면 missed에서 제외."""
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    msgs = d.run(now=datetime(2026, 4, 14, 8, 15, tzinfo=KST))
-    kinds = {m.kind for m in msgs if m.item_name == "수면"}
-    assert kinds == {"scheduled"}
-
-
-def test_missed_alert_sent_only_once_per_day(setup):
-    """같은 날 두 번 tick해도 missed 알림은 1회만."""
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
+def test_first_alert_when_schedule_slot_in_window(setup):
+    """schedule_time이 [now-30, now] 윈도우에 들어오면 첫 알림 발송 + pending_since 세팅."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
     send = MagicMock()
     d = Dispatcher(items, records, telegram_send=send)
-    msgs1 = d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
-    msgs2 = d.run(now=datetime(2026, 4, 14, 14, 30, tzinfo=KST))
-    assert len(msgs1) == 1 and msgs1[0].kind == "missed"
+    msgs = d.run(now=_kst(2026, 5, 1, 22, 5))
+    assert len(msgs) == 1
+    assert msgs[0].item_name == "수면"
+    assert send.call_count == 1
+    item = s.get_tracked_item_by_name("수면")
+    assert item["pending_since"] is not None
+    assert item["last_asked_at"] is not None
+
+
+def test_no_double_fire_at_plus_30(setup):
+    """첫 알림 30분 뒤에는 schedule_slot이 윈도우 밖 → 추가 알림 없음 (현행 +30 noise 제거)."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))   # 첫 알림
+    msgs2 = d.run(now=_kst(2026, 5, 1, 22, 35))   # +30
     assert msgs2 == []
     assert send.call_count == 1
 
 
-def test_missed_alert_resets_next_day(setup):
-    """다음 날 슬롯이 다시 도래하면 missed 알림이 다시 발송된다."""
-    _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
-    d = Dispatcher(items, records, telegram_send=MagicMock())
-    d.run(now=datetime(2026, 4, 14, 12, 0, tzinfo=KST))
-    msgs_next_day = d.run(now=datetime(2026, 4, 15, 12, 0, tzinfo=KST))
-    assert len(msgs_next_day) == 1
-    assert msgs_next_day[0].kind == "missed"
+def test_record_arrived_clears_pending(setup):
+    """첫 알림 후 사용자가 record를 입력하면 다음 tick에서 pending이 클리어된다."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))
+    records.upsert("수면", "2026-05-01", value_num=480, raw_input="8h")
+    # 다음날 09:00 retry 슬롯 → record가 있으니 fire 안 함
+    msgs = d.run(now=_kst(2026, 5, 2, 9, 5))
+    assert msgs == []
+    item = s.get_tracked_item_by_name("수면")
+    assert item["pending_since"] is None
 
 
-def test_run_calls_telegram_send_for_each_message(setup):
+# --- retry chain ---
+
+
+def test_retry_at_09_when_pending(setup):
+    """첫 알림 후 답이 없으면 다음날 09:00 retry 슬롯에서 재질문."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))   # 첫 알림
+    msgs = d.run(now=_kst(2026, 5, 2, 9, 5))
+    assert len(msgs) == 1
+    assert msgs[0].item_name == "수면"
+    assert send.call_count == 2
+
+
+def test_retry_chain_09_14_20(setup):
+    """답이 없으면 09 → 14 → 20 모두 retry."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))   # 첫 알림
+    d.run(now=_kst(2026, 5, 2, 9, 5))
+    d.run(now=_kst(2026, 5, 2, 14, 5))
+    d.run(now=_kst(2026, 5, 2, 20, 5))
+    assert send.call_count == 4
+
+
+def test_retry_does_not_fire_without_pending(setup):
+    """pending_since가 없으면 retry 슬롯에서도 fire 안 함."""
     _, items, records = setup
-    items.add("수면", "duration", None, "08:00")
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    msgs = d.run(now=_kst(2026, 5, 1, 9, 5))   # 22:00 슬롯 도래 전
+    assert msgs == []
+    assert send.call_count == 0
+
+
+def test_retry_slot_no_double_fire_in_same_window(setup):
+    """같은 retry 슬롯 윈도우에서 두 번 tick해도 한 번만 fire."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))   # 첫 알림
+    d.run(now=_kst(2026, 5, 2, 9, 5))    # retry 1
+    msgs = d.run(now=_kst(2026, 5, 2, 9, 25))   # 같은 09:00 슬롯, 다른 tick
+    assert msgs == []
+    assert send.call_count == 2
+
+
+def test_next_schedule_slot_clears_stale_pending(setup):
+    """다음날 22:00 schedule_slot 도달 시 어제 pending은 폐기되고 새 알림이 fire된다."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))   # day1 첫 알림
+    msgs = d.run(now=_kst(2026, 5, 2, 22, 5))   # day2 첫 알림 (day1 pending은 폐기)
+    assert len(msgs) == 1
+    item = s.get_tracked_item_by_name("수면")
+    # pending_since는 day2 알림 시각
+    assert item["pending_since"] is not None
+    # day2 첫 알림이 day1 알림(13:00 UTC) 이후
+    assert item["pending_since"] > "2026-05-01 13:00:00"
+
+
+# --- batch ---
+
+
+def test_multiple_items_batched_into_one_message(setup):
+    """같은 tick에 두 항목이 fire되면 한 메시지로 묶임."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "22:00")
     items.add("음주", "quantity", "잔", "22:00")
     send = MagicMock()
     d = Dispatcher(items, records, telegram_send=send)
-    d.run(now=datetime(2026, 4, 14, 23, 0, tzinfo=KST))
-    # 22:00 이후이므로 음주는 missed
-    assert send.call_count >= 1
+    msgs = d.run(now=_kst(2026, 5, 1, 22, 5))
+    assert len(msgs) == 2   # DispatchMessage 자체는 항목별로 2개
+    assert send.call_count == 1   # 그러나 텔레그램 send는 1번
+    sent_text = send.call_args.args[0]
+    assert "수면" in sent_text
+    assert "음주" in sent_text
+
+
+def test_single_item_uses_solo_format(setup):
+    """단일 항목은 기존 솔로 포맷 (번호 리스트 아님)."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))
+    sent_text = send.call_args.args[0]
+    assert "기록할 항목" not in sent_text   # batch 헤더 아님
+    assert "수면" in sent_text
+
+
+def test_batch_includes_first_alert_and_retry_in_same_tick(setup):
+    """09:00에 첫 알림인 항목 + 09:00 retry 슬롯에 걸린 미답 항목이 한 메시지로 묶임."""
+    s, items, records = setup
+    items.add("아침메모", "freetext", None, "09:00")
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))   # 수면 첫 알림 → pending 세팅
+    msgs = d.run(now=_kst(2026, 5, 2, 9, 5))
+    # 아침메모는 첫 알림, 수면은 retry. 한 메시지에 둘 다 들어가야 함
+    assert send.call_count == 2   # day1 첫 알림 + day2 batch
+    sent_text = send.call_args.args[0]
+    assert "아침메모" in sent_text
+    assert "수면" in sent_text
+
+
+# --- 24h 내 record 있으면 첫 알림 skip ---
+
+
+def test_first_alert_skipped_if_recent_record(setup):
+    """schedule_slot 도래해도 24시간 내 record가 있으면 첫 알림 skip."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    records.upsert("수면", "2026-05-01", value_num=480, raw_input="이미 입력")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    msgs = d.run(now=_kst(2026, 5, 1, 22, 5))
+    assert msgs == []
+    assert send.call_count == 0
