@@ -173,6 +173,42 @@ class Storage:
         finally:
             conn.close()
 
+    def set_pending_since(self, item_id: int, when_utc: str) -> None:
+        """첫 알림 발송 시각(UTC ISO)을 기록."""
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE tracked_items SET pending_since = ? WHERE id = ?",
+                (when_utc, item_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def clear_pending(self, item_id: int) -> None:
+        """답이 들어오거나 다음 schedule_slot 도래 시 호출."""
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE tracked_items SET pending_since = NULL WHERE id = ?",
+                (item_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def set_last_asked_at(self, item_id: int, when_utc: str) -> None:
+        """가장 최근 알림 시각(UTC ISO). retry 슬롯 중복 fire 방지용."""
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE tracked_items SET last_asked_at = ? WHERE id = ?",
+                (when_utc, item_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def delete_tracked_item(self, name: str) -> None:
         conn = self._connect()
         try:
