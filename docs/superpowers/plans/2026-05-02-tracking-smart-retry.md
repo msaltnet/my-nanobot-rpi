@@ -720,7 +720,7 @@ dispatcher가 여러 항목을 한 메시지로 묶어 보낼 수 있다. 예:
 
 ### boolean 부정 답
 
-boolean schema 항목에서 사용자가 "아니" / "안 했어" / "no" / "패스" 등 부정 의미를 표현하면 `--no-bool`로 기록한다. 예: "영어공부 안 했어" → `msalt-nanobot tracking record 영어공부 --date YYYY-MM-DD --no-bool --raw "영어공부 안 했어"`.
+boolean schema 항목에서 사용자가 "아니" / "안 했어" / "no" / "패스" 등 부정 의미를 표현하면 `--no-bool`로 기록한다. 예: "영어공부 안 했어" → `my-nanobot-rpi tracking record 영어공부 --date YYYY-MM-DD --no-bool --raw "영어공부 안 했어"`.
 ```
 
 - [ ] **Step 4.2: 변경 검증 (lint/syntax 무관, 사람 읽기용 문서)**
@@ -792,12 +792,12 @@ Expected: `diff`가 빈 출력이면 OK, `SKILL.md synced` 출력.
 
 - [ ] **Step 6.3: DB 마이그레이션은 자동**
 
-`msalt-nanobot` 재시작 시 `Storage.initialize()`가 ALTER TABLE을 자동 실행하므로 별도 작업 없음.
+`my-nanobot-rpi` 재시작 시 `Storage.initialize()`가 ALTER TABLE을 자동 실행하므로 별도 작업 없음.
 
 - [ ] **Step 6.4: 서비스 재시작**
 
 ```bash
-ssh msalt-rpi "sudo systemctl restart msalt-nanobot && sleep 3 && sudo systemctl is-active msalt-nanobot"
+ssh msalt-rpi "sudo systemctl restart my-nanobot-rpi && sleep 3 && sudo systemctl is-active my-nanobot-rpi"
 ```
 
 Expected: `active`.
@@ -815,7 +815,7 @@ Expected: `pending_since`와 `last_asked_at` 컬럼이 출력에 보임.
 새 알림이 의도대로 묶이는지 확인. 미답 항목이 있을 때:
 
 ```bash
-ssh msalt-rpi "cd /home/ubuntu/nanobot && /home/ubuntu/nanobot/.venv/bin/msalt-nanobot tracking dispatch"
+ssh msalt-rpi "cd /home/ubuntu/nanobot && /home/ubuntu/nanobot/.venv/bin/my-nanobot-rpi tracking dispatch"
 ```
 
 Expected: 알림이 발송되거나 (미답 항목이 있고 슬롯이 윈도우 안) `dispatched 0 message(s)` (없을 때).

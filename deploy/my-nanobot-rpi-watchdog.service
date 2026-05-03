@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart my-nanobot-rpi if telegram channel is zombie
+After=my-nanobot-rpi.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/my-nanobot-rpi/deploy/check-telegram-channel.sh
+StandardOutput=journal
+StandardError=journal

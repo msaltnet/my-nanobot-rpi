@@ -1,15 +1,18 @@
 [Unit]
-Description=msalt tracking dispatcher (one-shot)
+Description=my-nanobot-rpi AI Assistant
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=pi
 WorkingDirectory=/home/pi/my-nanobot-rpi
 EnvironmentFile=/home/pi/my-nanobot-rpi/.env
 Environment="VIRTUAL_ENV=/home/pi/my-nanobot-rpi/.venv"
 Environment="PATH=/home/pi/my-nanobot-rpi/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/home/pi/my-nanobot-rpi/.venv/bin/python -m msalt.tracking dispatch
-StandardOutput=journal
-StandardError=journal
+ExecStart=/home/pi/my-nanobot-rpi/.venv/bin/my-nanobot-rpi
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-# msalt-nanobot 라즈베리파이 배포 가이드
+# my-nanobot-rpi 라즈베리파이 배포 가이드
 
 ## 요구사항
 
@@ -16,8 +16,8 @@
 
 ```bash
 cd /home/pi
-git clone https://github.com/msaltnet/nanobot.git msalt-nanobot
-cd msalt-nanobot
+git clone https://github.com/msaltnet/nanobot.git my-nanobot-rpi
+cd my-nanobot-rpi
 ```
 
 Ubuntu 등 다른 사용자/경로여도 됩니다 (예: `/home/ubuntu/nanobot`). setup 스크립트가 실제 경로와 현재 사용자를 자동 탐지해 systemd 유닛에 반영합니다.
@@ -34,13 +34,13 @@ bash deploy/setup-rpi.sh
 - Python 3.11 설치
 - 가상환경 생성 및 `pip install -e .`
 - `.env` 파일 생성 (이미 있으면 보존)
-- `msalt-nanobot.service` systemd 등록 + enable (경로/사용자 자동 치환)
+- `my-nanobot-rpi.service` systemd 등록 + enable (경로/사용자 자동 치환)
 - `msalt-tracking-dispatch.timer` 등록 + enable + start (30분 주기)
 
 **스크립트 재실행은 안전합니다.** `.env`는 덮어쓰지 않고, 유닛 파일만 새 버전으로 갱신합니다. 단, **이미 실행 중인 서비스는 자동 재시작되지 않으므로** 유닛 변경을 반영하려면 명시적으로:
 
 ```bash
-sudo systemctl restart msalt-nanobot
+sudo systemctl restart my-nanobot-rpi
 sudo systemctl restart msalt-tracking-dispatch.timer
 ```
 
@@ -51,7 +51,7 @@ sudo systemctl restart msalt-tracking-dispatch.timer
 리포 루트의 `.env`를 편집합니다. systemd가 `EnvironmentFile`로 자동 로드합니다 (경로는 setup 스크립트가 실제 클론 위치로 치환해 둡니다).
 
 ```bash
-nano .env     # 예: /home/pi/msalt-nanobot/.env, /home/ubuntu/nanobot/.env
+nano .env     # 예: /home/pi/my-nanobot-rpi/.env, /home/ubuntu/nanobot/.env
 ```
 
 ```env
@@ -71,7 +71,7 @@ BRAVE_API_KEY=BSA...
 
 ### 최초 기동 및 seed 점검
 
-`msalt-nanobot`을 처음 실행하면 `~/.nanobot/` 전체가 msalt 템플릿으로 자동 생성됩니다:
+`my-nanobot-rpi`을 처음 실행하면 `~/.nanobot/` 전체가 msalt 템플릿으로 자동 생성됩니다:
 
 | 경로 | 내용 |
 |------|------|
@@ -85,7 +85,7 @@ BRAVE_API_KEY=BSA...
 
 ```bash
 source .venv/bin/activate
-msalt-nanobot doctor
+my-nanobot-rpi doctor
 ```
 
 모든 체크에 녹색 ✓가 떠야 정상. 노란색 ⚠가 나오면 `.env`에 `TELEGRAM_USER_ID` 누락 등이 원인일 수 있습니다.
@@ -101,32 +101,32 @@ nano ~/.nanobot/workspace/SOUL.md
 ### 주요 명령
 
 ```bash
-sudo systemctl start msalt-nanobot       # 시작
-sudo systemctl stop msalt-nanobot        # 중지
-sudo systemctl restart msalt-nanobot     # 재시작 (.env 변경 반영)
-sudo systemctl status msalt-nanobot      # 상태 확인
+sudo systemctl start my-nanobot-rpi       # 시작
+sudo systemctl stop my-nanobot-rpi        # 중지
+sudo systemctl restart my-nanobot-rpi     # 재시작 (.env 변경 반영)
+sudo systemctl status my-nanobot-rpi      # 상태 확인
 ```
 
 ### 로그
 
 ```bash
 # 실시간 스트림
-journalctl -u msalt-nanobot -f
+journalctl -u my-nanobot-rpi -f
 
 # 최근 100줄
-journalctl -u msalt-nanobot -n 100
+journalctl -u my-nanobot-rpi -n 100
 ```
 
 ### 자동 시작
 
 ```bash
-sudo systemctl enable msalt-nanobot      # 부팅 시 자동 시작 (setup-rpi.sh가 이미 수행)
-sudo systemctl disable msalt-nanobot
+sudo systemctl enable my-nanobot-rpi      # 부팅 시 자동 시작 (setup-rpi.sh가 이미 수행)
+sudo systemctl disable my-nanobot-rpi
 ```
 
 ## 자동 브리핑 (nanobot cron)
 
-nanobot 내장 크론이 `~/.nanobot/workspace/cron/jobs.json`을 읽어 평일 07:00/19:00 KST에 `news-briefing` 스킬을 트리거하고, 결과를 텔레그램으로 자동 발송합니다. 별도 systemd 타이머 없이 `msalt-nanobot` 프로세스 자체가 처리합니다.
+nanobot 내장 크론이 `~/.nanobot/workspace/cron/jobs.json`을 읽어 평일 07:00/19:00 KST에 `news-briefing` 스킬을 트리거하고, 결과를 텔레그램으로 자동 발송합니다. 별도 systemd 타이머 없이 `my-nanobot-rpi` 프로세스 자체가 처리합니다.
 
 ### 잡 확인
 
@@ -138,8 +138,8 @@ cat ~/.nanobot/workspace/cron/jobs.json
 
 ```bash
 rm ~/.nanobot/workspace/cron/jobs.json
-msalt-nanobot doctor
-sudo systemctl restart msalt-nanobot
+my-nanobot-rpi doctor
+sudo systemctl restart my-nanobot-rpi
 ```
 
 ### 스케줄/메시지 변경
@@ -185,9 +185,9 @@ htop   # 없으면 sudo apt-get install -y htop
 서비스 로그에서 인증 오류가 발생하는 경우:
 
 ```bash
-journalctl -u msalt-nanobot -n 50 | grep -i "error\|auth\|key"
+journalctl -u my-nanobot-rpi -n 50 | grep -i "error\|auth\|key"
 cat .env                                # 리포 루트에서 실행
-sudo systemctl restart msalt-nanobot    # .env 변경 반영
+sudo systemctl restart my-nanobot-rpi    # .env 변경 반영
 ```
 
 ### 텔레그램 연결 문제
@@ -204,10 +204,10 @@ sudo systemctl restart msalt-nanobot    # .env 변경 반영
 다른 nanobot 프로젝트에서 남긴 MCP 서버나 불필요한 설정(예: yfinance)이 에러를 일으킬 수 있습니다. 통째로 초기화:
 
 ```bash
-sudo systemctl stop msalt-nanobot
+sudo systemctl stop my-nanobot-rpi
 mv ~/.nanobot ~/.nanobot.bak.$(date +%Y%m%d)
-msalt-nanobot doctor                        # 깨끗한 msalt 템플릿으로 재 seed
-sudo systemctl start msalt-nanobot
+my-nanobot-rpi doctor                        # 깨끗한 msalt 템플릿으로 재 seed
+sudo systemctl start my-nanobot-rpi
 ```
 
 백업(`~/.nanobot.bak.*`)은 며칠 확인 후 `rm -rf`로 삭제.
@@ -249,21 +249,21 @@ sudo dphys-swapfile swapon
 
 ### 브리핑 내용이 비어 있음
 
-- RSS 소스 점검: `msalt-nanobot doctor`
-- 수동 수집: `msalt-nanobot news collect`
-- 수동 브리핑: `msalt-nanobot news briefing morning`
+- RSS 소스 점검: `my-nanobot-rpi doctor`
+- 수동 수집: `my-nanobot-rpi news collect`
+- 수동 브리핑: `my-nanobot-rpi news briefing morning`
 
-### LLM이 `msalt-nanobot tracking ...` 호출 시 `command not found` (exit 127)
+### LLM이 `my-nanobot-rpi tracking ...` 호출 시 `command not found` (exit 127)
 
 봇이 추적 기록을 시도하다 실패하고 다음 같은 에러를 그대로 보여주는 경우:
 
 ```
 STDERR:
-/usr/bin/bash: line 1: msalt-nanobot: command not found
+/usr/bin/bash: line 1: my-nanobot-rpi: command not found
 Exit code: 127
 ```
 
-**원인**: nanobot의 exec 도구는 secrets 누출 방지를 위해 LLM이 만든 명령에 부모 프로세스의 PATH를 전달하지 않습니다. 따라서 venv bin이 자식 bash의 PATH에 들어가지 않아 `msalt-nanobot` 실행파일을 못 찾습니다.
+**원인**: nanobot의 exec 도구는 secrets 누출 방지를 위해 LLM이 만든 명령에 부모 프로세스의 PATH를 전달하지 않습니다. 따라서 venv bin이 자식 bash의 PATH에 들어가지 않아 `my-nanobot-rpi` 실행파일을 못 찾습니다.
 
 **해결**: `~/.nanobot/config.json`의 `tools.exec.path_append`에 venv bin 절대경로를 박습니다. 새 배포는 `setup-rpi.sh`가 자동 처리합니다. 이미 설치된 경우 수동으로:
 
@@ -279,5 +279,5 @@ data.setdefault('tools', {}).setdefault('exec', {})['path_append'] = desired
 cfg.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
 print(f'patched tools.exec.path_append -> {desired}')
 PY
-sudo systemctl restart msalt-nanobot
+sudo systemctl restart my-nanobot-rpi
 ```

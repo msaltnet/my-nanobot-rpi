@@ -44,7 +44,7 @@
 | `deploy/setup-rpi.sh` | 신규 service/timer 설치 단계 추가 |
 | `docs/msalt-prd.md` | §4.2 lifestyle → tracking 재작성, §8 ADR #11~#14 추가 |
 | `docs/msalt-trd.md` | §3.3, §4(데이터 모델), §5(외부 의존성), §6(배포 토폴로지) 갱신 |
-| `msalt-nanobot.md` | 기능 섹션, 디렉토리 트리 갱신 |
+| `my-nanobot-rpi.md` | 기능 섹션, 디렉토리 트리 갱신 |
 | `msalt/workspace/SOUL.md` | "할일" 언급 제거, tracking 시스템 설명 |
 | `msalt/workspace/USER.md` | 루틴 갱신 |
 | `docs/msalt-setup.md`, `docs/msalt-rpi-deploy.md` | tracking 관련 단계 추가 |
@@ -186,14 +186,14 @@ git commit -m "refactor(msalt): drop lifestyle tables and methods from Storage"
 
 **Files:**
 - Modify: `msalt/skills/news/SKILL.md` (참조 없으면 skip)
-- Modify: `msalt-nanobot.md` (lifestyle 언급에 "(deprecated)" 마크)
+- Modify: `my-nanobot-rpi.md` (lifestyle 언급에 "(deprecated)" 마크)
 
 이 단계는 **임시 표시**다. 최종 문서 갱신은 Task 11에서 일괄 처리.
 
 - [ ] **Step 1: lifestyle 잔존 참조 식별**
 
 ```bash
-grep -rn "lifestyle" msalt-nanobot.md docs/ deploy/ 2>/dev/null
+grep -rn "lifestyle" my-nanobot-rpi.md docs/ deploy/ 2>/dev/null
 ```
 
 - [ ] **Step 2: 즉시 깨질 명령(예: `python -m msalt.lifestyle ...`) 주석화**
@@ -1864,9 +1864,9 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=pi
-WorkingDirectory=/home/pi/msalt-nanobot
-EnvironmentFile=/home/pi/msalt-nanobot/.env
-ExecStart=/home/pi/msalt-nanobot/.venv/bin/python -m msalt.tracking dispatch
+WorkingDirectory=/home/pi/my-nanobot-rpi
+EnvironmentFile=/home/pi/my-nanobot-rpi/.env
+ExecStart=/home/pi/my-nanobot-rpi/.venv/bin/python -m msalt.tracking dispatch
 StandardOutput=journal
 StandardError=journal
 ```
@@ -1910,7 +1910,7 @@ grep -n "systemctl\|cp.*service" deploy/setup-rpi.sh
 
 - [ ] **Step 2: tracking timer 설치 블록 추가**
 
-기존 `cp deploy/msalt-nanobot.service` 라인 뒤에 다음 추가:
+기존 `cp deploy/my-nanobot-rpi.service` 라인 뒤에 다음 추가:
 
 ```bash
 sudo cp deploy/msalt-tracking-dispatch.service /etc/systemd/system/
@@ -1975,13 +1975,13 @@ git commit -m "chore(msalt): clean up residual lifestyle references"
 **Files:** (모두 수정)
 - `docs/msalt-prd.md`
 - `docs/msalt-trd.md`
-- `msalt-nanobot.md`
+- `my-nanobot-rpi.md`
 - `msalt/workspace/SOUL.md`
 - `msalt/workspace/USER.md`
 - `docs/msalt-setup.md`
 - `docs/msalt-rpi-deploy.md`
-- `docs/superpowers/specs/2026-04-12-msalt-nanobot-design.md` (deprecated 노트)
-- `docs/superpowers/plans/2026-04-12-msalt-nanobot.md` (deprecated 노트)
+- `docs/superpowers/specs/2026-04-12-my-nanobot-rpi-design.md` (deprecated 노트)
+- `docs/superpowers/plans/2026-04-12-my-nanobot-rpi.md` (deprecated 노트)
 
 - [ ] **Step 1: PRD §4.2 재작성**
 
@@ -2054,7 +2054,7 @@ gpt-5-mini 단발 호출로 두 가지를 처리: (1) 기록 입력 자연어 �
         │       └── python -m msalt.tracking dispatch → Telegram 직접 발송
 ```
 
-- [ ] **Step 4: msalt-nanobot.md 갱신**
+- [ ] **Step 4: my-nanobot-rpi.md 갱신**
 
 1. "주요 기능" §2 "생활 습관 관리"의 본문을 PRD §4.2와 같은 맥락으로 한 단락 요약:
 
@@ -2118,18 +2118,18 @@ journalctl -u msalt-tracking-dispatch.service -n 20
 
 - [ ] **Step 8: deprecated 노트**
 
-`docs/superpowers/specs/2026-04-12-msalt-nanobot-design.md` 최상단에:
+`docs/superpowers/specs/2026-04-12-my-nanobot-rpi-design.md` 최상단에:
 
 ```markdown
 > **2026-04-14 업데이트**: 본 spec의 Phase 3 (생활 습관) 섹션은 폐기되고 [2026-04-14-msalt-tracking-redesign.md](2026-04-14-msalt-tracking-redesign.md) spec으로 대체되었다.
 ```
 
-`docs/superpowers/plans/2026-04-12-msalt-nanobot.md` 최상단에 같은 노트.
+`docs/superpowers/plans/2026-04-12-my-nanobot-rpi.md` 최상단에 같은 노트.
 
 - [ ] **Step 9: 커밋**
 
 ```bash
-git add docs/ msalt-nanobot.md msalt/workspace/
+git add docs/ my-nanobot-rpi.md msalt/workspace/
 git commit -m "docs(msalt): update PRD/TRD/SOUL/USER/README for tracking redesign"
 ```
 

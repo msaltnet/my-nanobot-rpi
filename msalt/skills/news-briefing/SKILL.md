@@ -10,13 +10,13 @@ metadata: {"always": false}
 
 1. 뉴스 수집 실행:
 ```bash
-msalt-nanobot news collect
+my-nanobot-rpi news collect
 ```
 
 2. 브리핑 생성 (저녁이면 `evening` 인자):
 ```bash
-msalt-nanobot news briefing
-msalt-nanobot news briefing evening
+my-nanobot-rpi news briefing
+my-nanobot-rpi news briefing evening
 ```
 
 3. 결과를 사용자에게 전달하세요.

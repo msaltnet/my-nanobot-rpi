@@ -120,7 +120,7 @@ def test_gateway_exits_when_env_missing(tmp_path, monkeypatch):
 
 
 def test_tracking_subcommand_passes_argv_to_run_command(monkeypatch):
-    """`msalt-nanobot tracking <args>` 가 args를 그대로 msalt.tracking.cli.run_command로 위임하는지 확인.
+    """`my-nanobot-rpi tracking <args>` 가 args를 그대로 msalt.tracking.cli.run_command로 위임하는지 확인.
 
     이게 깨지면 봇이 'python3 -m msalt.tracking …' 같은 폴백을 쓰게 되고,
     Ubuntu 시스템 인터프리터에는 msalt가 없어 ModuleNotFoundError가 난다.

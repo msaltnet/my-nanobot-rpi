@@ -41,5 +41,5 @@ ENV HOME=/home/nanobot
 # Gateway default port
 EXPOSE 18790
 
-ENTRYPOINT ["msalt-nanobot"]
+ENTRYPOINT ["my-nanobot-rpi"]
 CMD ["gateway"]

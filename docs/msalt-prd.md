@@ -1,4 +1,4 @@
-# msalt-nanobot PRD
+# my-nanobot-rpi PRD
 
 > **문서 성격**: 사후 정리 PRD. 이미 구현이 완료된 프로젝트의 가치 제안과 의사결정을 회고적으로 기록한다. 외부 공유와 인수인계 양쪽에 사용한다.
 >
@@ -8,7 +8,7 @@
 
 ## 1. 개요
 
-**msalt-nanobot**은 [nanobot](https://github.com/nanobot-ai/nanobot) 프레임워크를 포크해 라즈베리파이 3B+에서 24시간 구동되는 **1인용 개인 AI 비서**다. 텔레그램 채팅을 인터페이스로 (1) 한국·미국 경제 뉴스 자동 브리핑과 (2) 사용자 정의 추적 항목 기반 생활 기록(자연어 입력 + 능동 질문)을 제공한다.
+**my-nanobot-rpi**은 [nanobot](https://github.com/nanobot-ai/nanobot) 프레임워크를 포크해 라즈베리파이 3B+에서 24시간 구동되는 **1인용 개인 AI 비서**다. 텔레그램 채팅을 인터페이스로 (1) 한국·미국 경제 뉴스 자동 브리핑과 (2) 사용자 정의 추적 항목 기반 생활 기록(자연어 입력 + 능동 질문)을 제공한다.
 
 ## 2. 배경과 문제
 
@@ -73,7 +73,7 @@
 **무엇을.** 라즈베리파이 3B+에서 systemd 서비스로 자동 시작·재시작되며 항상 켜진 상태를 유지한다.
 
 - 라즈베리파이 3B+ (1GB RAM) 단일 노드
-- systemd 서비스 (`msalt-nanobot.service`) 부팅 시 자동 시작
+- systemd 서비스 (`my-nanobot-rpi.service`) 부팅 시 자동 시작
 - swap 1GB로 OOM 방지
 - nanobot의 cron 스케줄링으로 정기 작업 트리거
 - 모든 데이터(SQLite + 메모리 파일)는 `~/.nanobot/workspace/` 단일 경로에 집중
@@ -150,5 +150,5 @@
 - [TRD (기술 요구사항)](msalt-trd.md)
 - [설정 가이드](msalt-setup.md)
 - [RPi 배포 가이드](msalt-rpi-deploy.md)
-- [원본 설계 문서](superpowers/specs/2026-04-12-msalt-nanobot-design.md)
-- [구현 계획](superpowers/plans/2026-04-12-msalt-nanobot.md)
+- [원본 설계 문서](superpowers/specs/2026-04-12-my-nanobot-rpi-design.md)
+- [구현 계획](superpowers/plans/2026-04-12-my-nanobot-rpi.md)

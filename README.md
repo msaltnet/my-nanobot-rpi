@@ -1,4 +1,4 @@
-# msalt-nanobot
+# my-nanobot-rpi
 
 nanobot 포크 기반 개인 AI 비서 — 경제 뉴스 브리핑 + 추적 항목 기반 생활 기록
 
@@ -29,7 +29,7 @@ nanobot 프레임워크를 기반으로 라즈베리파이 3B+에서 구동되�
 - GPT 기반 요약 브리핑 생성
 - 하루 2회 자동 브리핑 (아침 07:00, 저녁 19:00)
 - 키워드 검색, 주간 요약 등 대화형 요청 지원
-- `msalt-nanobot doctor`로 소스 연결 상태 상시 점검
+- `my-nanobot-rpi doctor`로 소스 연결 상태 상시 점검
 
 ### 2. 추적 항목 기반 생활 기록
 - 사용자 정의 항목 (수면·음주·영어공부 시드 + 자연어로 추가)
@@ -61,7 +61,7 @@ nanobot 프레임워크를 기반으로 라즈베리파이 3B+에서 구동되�
 
 ```
 msalt/
-├── cli.py                    # msalt-nanobot 엔트리포인트 (gateway/doctor/news)
+├── cli.py                    # my-nanobot-rpi 엔트리포인트 (gateway/doctor/news)
 ├── config.py                 # msalt 전용 설정
 ├── storage.py                # SQLite 저장소 (뉴스 + 추적 항목/기록)
 ├── nanobot-config.example.json  # 첫 실행 시 seed되는 기본 config
@@ -99,7 +99,7 @@ git submodule update --init --recursive
 
 # 2. 설치 (nanobot + msalt)
 pip install -e ./nanobot      # upstream nanobot 프레임워크
-pip install -e .              # msalt-nanobot
+pip install -e .              # my-nanobot-rpi
 
 # 3. 환경 변수 설정
 cp .env.example .env
@@ -109,7 +109,7 @@ cp .env.example .env
 #   TELEGRAM_USER_ID=...   (@userinfobot, 숫자 ID)
 
 # 4. 기동 — .env 자동 로드, config·workspace 자동 seed
-msalt-nanobot
+my-nanobot-rpi
 ```
 
 ### nanobot 업데이트
@@ -126,11 +126,11 @@ git commit -m "chore: update nanobot submodule to vX.X.X"
 **서브커맨드**
 
 ```bash
-msalt-nanobot               # 게이트웨이 기동 (기본)
-msalt-nanobot doctor        # .env · config · RSS 연결 점검
-msalt-nanobot news collect  # 수동 수집
-msalt-nanobot news briefing morning
-msalt-nanobot news search 금리
+my-nanobot-rpi               # 게이트웨이 기동 (기본)
+my-nanobot-rpi doctor        # .env · config · RSS 연결 점검
+my-nanobot-rpi news collect  # 수동 수집
+my-nanobot-rpi news briefing morning
+my-nanobot-rpi news search 금리
 ```
 
 라즈베리파이 배포는 [docs/msalt-rpi-deploy.md](docs/msalt-rpi-deploy.md) 참고.
@@ -139,8 +139,8 @@ msalt-nanobot news search 금리
 
 - [설정 가이드](docs/msalt-setup.md)
 - [RPi 배포 가이드](docs/msalt-rpi-deploy.md)
-- [설계 문서](docs/superpowers/specs/2026-04-12-msalt-nanobot-design.md)
-- [구현 계획](docs/superpowers/plans/2026-04-12-msalt-nanobot.md)
+- [설계 문서](docs/superpowers/specs/2026-04-12-my-nanobot-rpi-design.md)
+- [구현 계획](docs/superpowers/plans/2026-04-12-my-nanobot-rpi.md)
 
 ## 추후 확장
 

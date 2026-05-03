@@ -1,4 +1,4 @@
-# msalt-nanobot Implementation Plan
+# my-nanobot-rpi Implementation Plan
 
 > **2026-04-14 업데이트**: 본 plan의 Phase 3 (생활 습관) 태스크는 폐기되고 [../plans/2026-04-14-msalt-tracking-redesign.md](2026-04-14-msalt-tracking-redesign.md) plan으로 대체되었다.
 
@@ -10,7 +10,7 @@
 
 **Tech Stack:** Python 3.11+, nanobot (포크), OpenAI GPT (gpt-5-mini), python-telegram-bot, feedparser (RSS), SQLite, croniter
 
-**Spec:** [docs/superpowers/specs/2026-04-12-msalt-nanobot-design.md](../specs/2026-04-12-msalt-nanobot-design.md)
+**Spec:** [docs/superpowers/specs/2026-04-12-my-nanobot-rpi-design.md](../specs/2026-04-12-my-nanobot-rpi-design.md)
 
 ---
 
@@ -82,7 +82,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class MsaltConfig:
-    """msalt-nanobot 전용 설정."""
+    """my-nanobot-rpi 전용 설정."""
     timezone: str = "Asia/Seoul"
     news_sources_path: str = "msalt/news/sources.json"
     db_path: str = "msalt/data/msalt.db"
@@ -165,7 +165,7 @@ nanobot config는 `~/.nanobot/config.json`에 위치한다. 라즈베리파이�
 - [ ] **Step 2: Create setup guide**
 
 ```markdown
-# msalt-nanobot 설정 가이드
+# my-nanobot-rpi 설정 가이드
 
 ## 사전 준비
 
@@ -214,25 +214,25 @@ git commit -m "docs(msalt): add nanobot config example and setup guide"
 ### Task 3: 라즈베리파이 배포 가이드 및 systemd 서비스
 
 **Files:**
-- Create: `deploy/msalt-nanobot.service`
+- Create: `deploy/my-nanobot-rpi.service`
 - Create: `deploy/setup-rpi.sh`
 - Create: `docs/msalt-rpi-deploy.md`
 
 - [ ] **Step 1: Create systemd service file**
 
 ```ini
-# deploy/msalt-nanobot.service
+# deploy/my-nanobot-rpi.service
 [Unit]
-Description=msalt-nanobot AI Assistant
+Description=my-nanobot-rpi AI Assistant
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/msalt-nanobot
-EnvironmentFile=/home/pi/msalt-nanobot/.env
-ExecStart=/home/pi/msalt-nanobot/.venv/bin/nanobot gateway
+WorkingDirectory=/home/pi/my-nanobot-rpi
+EnvironmentFile=/home/pi/my-nanobot-rpi/.env
+ExecStart=/home/pi/my-nanobot-rpi/.venv/bin/nanobot gateway
 Restart=on-failure
 RestartSec=10
 
@@ -248,7 +248,7 @@ WantedBy=multi-user.target
 # Raspberry Pi 3B+ 환경 설정 스크립트
 set -euo pipefail
 
-echo "=== msalt-nanobot RPi Setup ==="
+echo "=== my-nanobot-rpi RPi Setup ==="
 
 # 1. swap 설정 (1GB)
 echo "Setting up 1GB swap..."
@@ -264,7 +264,7 @@ sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
 
 # 3. 프로젝트 설정
 echo "Setting up project..."
-cd /home/pi/msalt-nanobot
+cd /home/pi/my-nanobot-rpi
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -280,15 +280,15 @@ fi
 
 # 5. systemd 서비스 등록
 echo "Installing systemd service..."
-sudo cp deploy/msalt-nanobot.service /etc/systemd/system/
+sudo cp deploy/my-nanobot-rpi.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable msalt-nanobot
+sudo systemctl enable my-nanobot-rpi
 
 echo "=== Setup complete! ==="
 echo "1. Edit .env with your API keys"
 echo "2. Edit ~/.nanobot/config.json (see msalt/nanobot-config.example.json)"
-echo "3. Start: sudo systemctl start msalt-nanobot"
-echo "4. Logs: journalctl -u msalt-nanobot -f"
+echo "3. Start: sudo systemctl start my-nanobot-rpi"
+echo "4. Logs: journalctl -u my-nanobot-rpi -f"
 ```
 
 - [ ] **Step 3: Create deployment guide**
@@ -392,7 +392,7 @@ from datetime import datetime, timezone
 
 
 class Storage:
-    """msalt-nanobot SQLite 저장소."""
+    """my-nanobot-rpi SQLite 저장소."""
 
     def __init__(self, db_path: str):
         self.db_path = db_path

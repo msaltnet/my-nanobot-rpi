@@ -10,20 +10,20 @@ description: 경제 뉴스를 검색하고 요약합니다. 사용자가 뉴스,
 ## 최신 뉴스 브리핑 요청 시
 
 ```bash
-msalt-nanobot news briefing           # 아침 (기본)
-msalt-nanobot news briefing evening   # 저녁
+my-nanobot-rpi news briefing           # 아침 (기본)
+my-nanobot-rpi news briefing evening   # 저녁
 ```
 
 ## 키워드로 뉴스 검색 시
 
 ```bash
-msalt-nanobot news search "키워드"
+my-nanobot-rpi news search "키워드"
 ```
 
 ## 뉴스 수집 실행 (수동)
 
 ```bash
-msalt-nanobot news collect
+my-nanobot-rpi news collect
 ```
 
 ## 응답 가이드

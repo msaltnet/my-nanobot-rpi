@@ -1,6 +1,6 @@
-"""msalt-nanobot entry point.
+"""my-nanobot-rpi entry point.
 
-사용자는 `msalt-nanobot`만 기억하면 된다. 이 커맨드는:
+사용자는 `my-nanobot-rpi`만 기억하면 된다. 이 커맨드는:
 
 1. 프로젝트 루트의 `.env`를 환경 변수로 로드한다.
 2. `~/.nanobot/config.json`과 `~/.nanobot/workspace/{SOUL,USER}.md`가
@@ -8,9 +8,9 @@
 3. 기본 동작은 nanobot gateway 기동.
 
 서브커맨드:
-  msalt-nanobot            (default) 게이트웨이 기동
-  msalt-nanobot doctor     .env·config·RSS 연결 점검
-  msalt-nanobot news ...   뉴스 수집/브리핑/검색
+  my-nanobot-rpi            (default) 게이트웨이 기동
+  my-nanobot-rpi doctor     .env·config·RSS 연결 점검
+  my-nanobot-rpi news ...   뉴스 수집/브리핑/검색
 """
 from __future__ import annotations
 
@@ -123,8 +123,8 @@ def _check_env() -> list[str]:
 
 
 app = typer.Typer(
-    name="msalt-nanobot",
-    help="msalt-nanobot - 텔레그램 기반 개인 AI 비서 (nanobot 포크).",
+    name="my-nanobot-rpi",
+    help="my-nanobot-rpi - 텔레그램 기반 개인 AI 비서 (nanobot 포크).",
     no_args_is_help=False,
     invoke_without_command=True,
     add_completion=False,
@@ -168,7 +168,7 @@ def doctor() -> None:
     env_path = _load_dotenv()
     _seed_if_missing()
 
-    console.print("[bold]msalt-nanobot doctor[/bold]\n")
+    console.print("[bold]my-nanobot-rpi doctor[/bold]\n")
 
     # 1. .env
     if env_path:

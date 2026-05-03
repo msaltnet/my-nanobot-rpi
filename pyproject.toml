@@ -1,5 +1,5 @@
 [project]
-name = "msalt-nanobot"
+name = "my-nanobot-rpi"
 version = "0.1.0"
 description = "nanobot 기반 개인 AI 비서 — 경제 뉴스 브리핑 + 추적 항목 관리"
 readme = { file = "README.md", content-type = "text/markdown" }
@@ -28,7 +28,7 @@ dev = [
 ]
 
 [project.scripts]
-msalt-nanobot = "msalt.cli:app"
+my-nanobot-rpi = "msalt.cli:app"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run my-nanobot-rpi telegram channel watchdog every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=my-nanobot-rpi-watchdog.service
+
+[Install]
+WantedBy=timers.target

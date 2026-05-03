@@ -1,4 +1,4 @@
-# msalt-nanobot 설계 문서
+# my-nanobot-rpi 설계 문서
 
 > **2026-04-14 업데이트**: 본 spec의 Phase 3 (생활 습관) 섹션은 폐기되고 [2026-04-14-msalt-tracking-redesign.md](2026-04-14-msalt-tracking-redesign.md) spec으로 대체되었다.
 

@@ -3,7 +3,7 @@
 # Raspberry Pi 3B+ 환경 설정 스크립트
 set -euo pipefail
 
-echo "=== msalt-nanobot RPi Setup ==="
+echo "=== my-nanobot-rpi RPi Setup ==="
 
 # 0. 경로/사용자 자동 탐지
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -72,7 +72,7 @@ fi
 
 # 4-1. nanobot config seed + tools.exec.path_append를 venv bin으로 패치
 # nanobot exec 도구는 secrets 누출 방지를 위해 부모 PATH를 상속하지 않는다 (shell.py _build_env).
-# 따라서 venv bin을 path_append에 명시해야 LLM이 'msalt-nanobot tracking ...' 등을 호출할 수 있다.
+# 따라서 venv bin을 path_append에 명시해야 LLM이 'my-nanobot-rpi tracking ...' 등을 호출할 수 있다.
 echo "Seeding ~/.nanobot config and patching path_append..."
 VENV_BIN="${REPO_DIR}/.venv/bin"
 sudo -u "${RUN_USER}" -H "${VENV_BIN}/python" - <<PYEOF
@@ -103,16 +103,16 @@ install_unit() {
     tmp="$(mktemp)"
     sed \
         -e "s|^User=.*|User=${RUN_USER}|" \
-        -e "s|/home/pi/msalt-nanobot|${REPO_DIR}|g" \
+        -e "s|/home/pi/my-nanobot-rpi|${REPO_DIR}|g" \
         "${src}" > "${tmp}"
     sudo install -m 0644 "${tmp}" "/etc/systemd/system/${name}"
     rm -f "${tmp}"
 }
 
 echo "Installing systemd service..."
-install_unit "${REPO_DIR}/deploy/msalt-nanobot.service"
+install_unit "${REPO_DIR}/deploy/my-nanobot-rpi.service"
 sudo systemctl daemon-reload
-sudo systemctl enable msalt-nanobot
+sudo systemctl enable my-nanobot-rpi
 
 # 6. tracking dispatcher timer 등록 (30분 주기)
 echo "Installing tracking dispatcher timer..."
@@ -124,20 +124,20 @@ sudo systemctl enable --now msalt-tracking-dispatch.timer
 # 7. telegram 채널 좀비 watchdog (5분 주기)
 echo "Installing telegram channel watchdog..."
 chmod +x "${REPO_DIR}/deploy/check-telegram-channel.sh"
-install_unit "${REPO_DIR}/deploy/msalt-nanobot-watchdog.service"
-install_unit "${REPO_DIR}/deploy/msalt-nanobot-watchdog.timer"
+install_unit "${REPO_DIR}/deploy/my-nanobot-rpi-watchdog.service"
+install_unit "${REPO_DIR}/deploy/my-nanobot-rpi-watchdog.timer"
 sudo systemctl daemon-reload
-sudo systemctl enable --now msalt-nanobot-watchdog.timer
+sudo systemctl enable --now my-nanobot-rpi-watchdog.timer
 
 echo "=== Setup complete! ==="
 echo "1. Edit .env with your API keys (TELEGRAM_USER_ID must be numeric)"
-echo "2. msalt-nanobot doctor  # verify env, auto-seed config/workspace/skills/cron"
-echo "3. sudo systemctl start msalt-nanobot"
-echo "4. journalctl -u msalt-nanobot -f"
+echo "2. my-nanobot-rpi doctor  # verify env, auto-seed config/workspace/skills/cron"
+echo "3. sudo systemctl start my-nanobot-rpi"
+echo "4. journalctl -u my-nanobot-rpi -f"
 echo "5. systemctl list-timers msalt-tracking-dispatch.timer"
 echo ""
 echo "Re-running this script on an existing install:"
 echo "  .env is preserved, unit files are refreshed, but running services"
 echo "  keep the old definition. Apply unit changes with:"
-echo "    sudo systemctl restart msalt-nanobot"
+echo "    sudo systemctl restart my-nanobot-rpi"
 echo "    sudo systemctl restart msalt-tracking-dispatch.timer"

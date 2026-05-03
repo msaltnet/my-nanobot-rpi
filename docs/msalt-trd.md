@@ -1,4 +1,4 @@
-# msalt-nanobot TRD
+# my-nanobot-rpi TRD
 
 > **문서 성격**: 사후 정리 TRD. 시스템의 아키텍처와 컴포넌트별 책임을 기록한다. 코드 시그니처나 확장 가이드는 다루지 않으며, 그 정보는 코드와 [PYTHON_SDK.md](PYTHON_SDK.md)를 참조한다.
 >
@@ -8,7 +8,7 @@
 
 ## 1. 시스템 개요
 
-msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워크를 호스트하고, 그 위에 msalt 전용 도메인 모듈(`msalt/`)을 얹은 구조다. 외부와는 텔레그램 봇 API와 OpenAI / RSS 피드로 연결된다.
+my-nanobot-rpi은 **단일 라즈베리파이 노드**에서 nanobot 프레임워크를 호스트하고, 그 위에 msalt 전용 도메인 모듈(`msalt/`)을 얹은 구조다. 외부와는 텔레그램 봇 API와 OpenAI / RSS 피드로 연결된다.
 
 ### 컨텍스트 다이어그램
 
@@ -25,7 +25,7 @@ msalt-nanobot은 **단일 라즈베리파이 노드**에서 nanobot 프레임워
                             │ long polling
                             ▼
    ┌────────────────────────────────────────────────────┐
-   │   Raspberry Pi 3B+ — systemd: msalt-nanobot.service│
+   │   Raspberry Pi 3B+ — systemd: my-nanobot-rpi.service│
    │   ┌────────────────────────────────────────────┐   │
    │   │              nanobot core                  │   │
    │   │  (channels, agent loop, cron, dream, ...)  │   │
@@ -232,8 +232,8 @@ SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 3개 테이블.
 
 ```
 Raspberry Pi 3B+ (1GB RAM, 1GB swap)
-└── systemd: msalt-nanobot.service
-    └── msalt-nanobot (→ nanobot gateway)
+└── systemd: my-nanobot-rpi.service
+    └── my-nanobot-rpi (→ nanobot gateway)
         ├── Telegram channel (long polling)
         ├── Cron service
         │   ├── 07:00 KST → news-briefing skill
@@ -270,7 +270,7 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 - 인터넷 연결 24시간 유지 (RSS·OpenAI·Telegram 호출 필수)
 - RPi 전원·SD카드 안정성 (UPS·백업은 운영 정책)
 - swap 1GB 활성화 (OOM 방지)
-- 로그는 journald로 회수 (`journalctl -u msalt-nanobot`)
+- 로그는 journald로 회수 (`journalctl -u my-nanobot-rpi`)
 
 ## 7. 테스트 전략
 
@@ -303,7 +303,7 @@ Raspberry Pi 3B+ (1GB RAM, 1GB swap)
 - [PRD (제품 요구사항)](msalt-prd.md)
 - [설정 가이드](msalt-setup.md)
 - [RPi 배포 가이드](msalt-rpi-deploy.md)
-- [원본 설계 문서](superpowers/specs/2026-04-12-msalt-nanobot-design.md)
-- [구현 계획](superpowers/plans/2026-04-12-msalt-nanobot.md)
+- [원본 설계 문서](superpowers/specs/2026-04-12-my-nanobot-rpi-design.md)
+- [구현 계획](superpowers/plans/2026-04-12-my-nanobot-rpi.md)
 - [nanobot SDK 참조](PYTHON_SDK.md)
 - [nanobot 메모리 시스템](MEMORY.md)

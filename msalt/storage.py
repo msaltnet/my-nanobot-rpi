@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 class Storage:
-    """msalt-nanobot SQLite 저장소."""
+    """my-nanobot-rpi SQLite 저장소."""
 
     def __init__(self, db_path: str):
         self.db_path = db_path

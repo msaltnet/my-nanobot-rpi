@@ -8,7 +8,7 @@ _DEFAULT_SOURCES = str(_PKG_ROOT / "news" / "sources.json")
 
 @dataclass
 class MsaltConfig:
-    """msalt-nanobot 전용 설정."""
+    """my-nanobot-rpi 전용 설정."""
     timezone: str = "Asia/Seoul"
     news_sources_path: str = _DEFAULT_SOURCES
     db_path: str = _DEFAULT_DB

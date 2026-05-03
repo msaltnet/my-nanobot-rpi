@@ -1,4 +1,4 @@
-# msalt-nanobot 설정 가이드
+# my-nanobot-rpi 설정 가이드
 
 ## 사전 준비
 
@@ -37,7 +37,7 @@ cp .env.example .env
 #   TELEGRAM_USER_ID=...   (숫자 ID)
 
 # 3. 기동
-msalt-nanobot
+my-nanobot-rpi
 ```
 
 첫 실행 시 `~/.nanobot/config.json`과 `~/.nanobot/workspace/{SOUL,USER}.md`가
@@ -46,7 +46,7 @@ msalt 기본 템플릿으로 자동 생성됩니다.
 ## 상태 점검
 
 ```bash
-msalt-nanobot doctor
+my-nanobot-rpi doctor
 ```
 
 `.env` 로드 여부, 필수 환경 변수, config·workspace 파일 존재, RSS 소스 11개의

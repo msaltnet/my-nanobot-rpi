@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # deploy/check-telegram-channel.sh
-# 텔레그램 채널이 timeout으로 좀비 상태인지 검사하고 좀비면 msalt-nanobot을 재시작한다.
+# 텔레그램 채널이 timeout으로 좀비 상태인지 검사하고 좀비면 my-nanobot-rpi을 재시작한다.
 #
 # 좀비 판정: 최근 LOOKBACK_SEC 안에 'Failed to start channel telegram: Timed out'이
 # 마지막 채널 이벤트면 좀비. 그 뒤에 'Telegram bot ... connected'가 있으면 정상.
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 LOOKBACK_SEC="${LOOKBACK_SEC:-900}"
-SERVICE="msalt-nanobot"
+SERVICE="my-nanobot-rpi"
 SINCE="${LOOKBACK_SEC} seconds ago"
 
 # 마지막 timeout과 마지막 connected의 timestamp(초) 비교.

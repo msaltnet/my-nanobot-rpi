@@ -2,7 +2,7 @@
 
 > **상태**: 설계 확정, 구현 예정
 > **작성일**: 2026-04-14
-> **이전 설계**: [2026-04-12-msalt-nanobot-design.md](2026-04-12-msalt-nanobot-design.md) (Phase 3 lifestyle 전면 교체)
+> **이전 설계**: [2026-04-12-my-nanobot-rpi-design.md](2026-04-12-my-nanobot-rpi-design.md) (Phase 3 lifestyle 전면 교체)
 
 ---
 
@@ -10,7 +10,7 @@
 
 기존 lifestyle 모듈은 세 가지 구조적 한계가 있다.
 
-**할일 관리는 도메인 미스매치.** Todo는 "기록·통계·분석"이 아닌 능동적 작업 관리에 가깝다. msalt-nanobot의 정체성은 "지표 누적과 패턴 가시화"인데 todo가 끼어 들면 봇이 잔소리 도구처럼 느껴진다.
+**할일 관리는 도메인 미스매치.** Todo는 "기록·통계·분석"이 아닌 능동적 작업 관리에 가깝다. my-nanobot-rpi의 정체성은 "지표 누적과 패턴 가시화"인데 todo가 끼어 들면 봇이 잔소리 도구처럼 느껴진다.
 
 **고정된 기록 도메인.** `sleep_log`(수면 전용 테이블)와 `life_log`(키워드 분류 자유 텍스트) 두 가지로 나뉘어 있어, "음주", "영어 공부 시간" 같은 새 항목을 추가하려면 매번 코드 수정이 필요하다. 사용자가 추적하고 싶은 것은 시기에 따라 달라진다.
 
@@ -322,7 +322,7 @@ class ParsedItemIntent:
 
 - [docs/msalt-prd.md](../../msalt-prd.md) §4.2, §8 (ADR)
 - [docs/msalt-trd.md](../../msalt-trd.md) §3.3, §4, §5
-- [msalt-nanobot.md](../../../msalt-nanobot.md) 기능 섹션, 디렉토리 트리
+- [my-nanobot-rpi.md](../../../my-nanobot-rpi.md) 기능 섹션, 디렉토리 트리
 - [msalt/workspace/SOUL.md](../../../msalt/workspace/SOUL.md) §주요 역할
 - [msalt/workspace/USER.md](../../../msalt/workspace/USER.md) 루틴
 - [docs/msalt-setup.md](../../msalt-setup.md), [docs/msalt-rpi-deploy.md](../../msalt-rpi-deploy.md)
