@@ -26,17 +26,25 @@
 ## 설정과 기동
 
 ```bash
-# 1. 설치
+# 1. 클론 (submodule 포함)
+git clone --recursive https://github.com/msaltnet/my-nanobot-rpi.git
+cd my-nanobot-rpi
+
+# 기존 클론이면 submodule 초기화
+git submodule update --init --recursive
+
+# 2. 설치 (nanobot + msalt)
+pip install -e ./nanobot
 pip install -e .
 
-# 2. 환경 변수
+# 3. 환경 변수
 cp .env.example .env
 # .env 편집 — 3개 값 입력:
 #   OPENAI_API_KEY=sk-...
 #   TELEGRAM_BOT_TOKEN=...
 #   TELEGRAM_USER_ID=...   (숫자 ID)
 
-# 3. 기동
+# 4. 기동
 my-nanobot-rpi
 ```
 

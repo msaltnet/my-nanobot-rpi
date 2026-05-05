@@ -16,11 +16,19 @@
 
 ```bash
 cd /home/pi
-git clone https://github.com/msaltnet/nanobot.git my-nanobot-rpi
+git clone --recursive https://github.com/msaltnet/my-nanobot-rpi.git
 cd my-nanobot-rpi
 ```
 
-Ubuntu 등 다른 사용자/경로여도 됩니다 (예: `/home/ubuntu/nanobot`). setup 스크립트가 실제 경로와 현재 사용자를 자동 탐지해 systemd 유닛에 반영합니다.
+이미 `--recursive` 없이 클론했다면 submodule을 초기화합니다:
+
+```bash
+git submodule update --init --recursive
+```
+
+Ubuntu 등 다른 사용자/경로여도 됩니다 (예: `/home/ubuntu/my-nanobot-rpi`). setup 스크립트가 실제 경로와 현재 사용자를 자동 탐지해 systemd 유닛에 반영합니다.
+
+이 저장소는 upstream nanobot 프레임워크를 `nanobot/` submodule로 포함합니다. 배포 전 `nanobot/` 디렉터리가 비어 있으면 설치가 실패하므로, 기존 클론에서는 위 submodule 초기화 명령을 먼저 실행하세요.
 
 ### 2. 자동 설정 스크립트 실행
 
@@ -32,16 +40,20 @@ bash deploy/setup-rpi.sh
 
 - swap 1GB 설정 (메모리 부족 방지)
 - Python 3.11 설치
-- 가상환경 생성 및 `pip install -e .`
+- submodule 초기화 (`git submodule update --init --recursive`)
+- 가상환경 생성 및 `pip install -e ./nanobot`, `pip install -e .`
 - `.env` 파일 생성 (이미 있으면 보존)
+- `~/.nanobot` config/workspace/skills/cron seed 및 `tools.exec.path_append` 패치
 - `my-nanobot-rpi.service` systemd 등록 + enable (경로/사용자 자동 치환)
 - `msalt-tracking-dispatch.timer` 등록 + enable + start (30분 주기)
+- `my-nanobot-rpi-watchdog.timer` 등록 + enable + start (텔레그램 채널 watchdog)
 
 **스크립트 재실행은 안전합니다.** `.env`는 덮어쓰지 않고, 유닛 파일만 새 버전으로 갱신합니다. 단, **이미 실행 중인 서비스는 자동 재시작되지 않으므로** 유닛 변경을 반영하려면 명시적으로:
 
 ```bash
 sudo systemctl restart my-nanobot-rpi
 sudo systemctl restart msalt-tracking-dispatch.timer
+sudo systemctl restart my-nanobot-rpi-watchdog.timer
 ```
 
 ## 설정
