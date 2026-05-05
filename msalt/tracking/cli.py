@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import datetime
@@ -48,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_rec.add_argument("--bool", dest="value_bool", action="store_true")
     p_rec.add_argument("--no-bool", dest="value_bool_neg",
                        action="store_true")
+    p_rec.add_argument("--json", dest="value_json", default=None,
+                       help="structured value JSON")
     p_rec.add_argument("--raw", required=True)
 
     p_sum = sub.add_parser("summary", help="show summary")
@@ -109,6 +112,13 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
             bool_val = True
         elif args.value_bool_neg:
             bool_val = False
+        value_json = None
+        if args.value_json:
+            try:
+                value_json = json.loads(args.value_json)
+            except json.JSONDecodeError as e:
+                print(f"error: invalid JSON: {e}", file=sys.stderr)
+                return 2
         try:
             records.upsert(
                 args.name, args.date,
@@ -116,6 +126,7 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
                 value_text=args.text,
                 value_num=args.num,
                 value_bool=bool_val,
+                value_json=value_json,
             )
         except KeyError as e:
             print(f"error: {e}", file=sys.stderr)

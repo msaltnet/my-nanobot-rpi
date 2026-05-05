@@ -5,6 +5,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from msalt.tracking.alcohol import alcohol_profiles_for_prompt
+
 
 @dataclass
 class ParsedRecord:
@@ -13,6 +15,7 @@ class ParsedRecord:
     value_text: str | None
     value_num: float | None
     value_bool: bool | None
+    value_json: dict[str, Any] | None
     confidence: float
 
 
@@ -29,12 +32,23 @@ _RECORD_SYSTEM = """\
 주어진 known_items 중 하나에 매칭되는지 판단하고, 해당하는 시점·값을 추출하라.
 응답은 반드시 다음 JSON 한 줄만 출력:
 {"item_name": str|null, "recorded_for": "YYYY-MM-DD", "value_text": str|null,
- "value_num": number|null, "value_bool": bool|null, "confidence": 0~1}
+ "value_num": number|null, "value_bool": bool|null, "value_json": object|null,
+ "confidence": 0~1}
 
 규칙:
 - "어제"/"지난주 화요일" 등 상대 시점은 now 기준으로 절대 날짜 변환.
 - duration schema → value_num은 분 단위 정수.
 - quantity schema → value_num은 숫자, 단위는 item의 unit 사용.
+- item_name이 "음주"이면 value_num은 순알코올 g으로 표준화한다.
+- 음주 value_json은 가능한 한 다음 필드를 채운다:
+  {"drink_type": str|null, "amount": number, "unit": str,
+   "serving_ml": number|null, "abv_percent": number|null, "alcohol_g": number}
+- 음주 계산: alcohol_g = amount * serving_ml * (abv_percent / 100) * 0.789.
+- drink_type이 alcohol_profiles에 있으면 그 기본 unit, serving_ml, abv_percent를 우선 사용.
+  사용자가 용량이나 도수를 직접 말하면 사용자 값을 우선한다.
+- "안 마심", "안마셨어" 등은 음주 기록으로 보고 value_num=0,
+  value_json={"drink_type": null, "amount": 0, "unit": "잔",
+  "serving_ml": null, "abv_percent": null, "alcohol_g": 0}.
 - boolean schema → value_bool.
 - freetext schema → value_text에 원문 핵심.
 - 매칭 없거나 모호하면 item_name=null, confidence=0.
@@ -79,6 +93,7 @@ class NaturalLanguageParser:
         user = json.dumps({
             "now": now,
             "known_items": items_view,
+            "alcohol_profiles": alcohol_profiles_for_prompt(),
             "input": text,
         }, ensure_ascii=False)
         raw = self._chat(_RECORD_SYSTEM, user)
@@ -90,12 +105,15 @@ class NaturalLanguageParser:
                 value_text=data.get("value_text"),
                 value_num=data.get("value_num"),
                 value_bool=data.get("value_bool"),
+                value_json=data.get("value_json")
+                if isinstance(data.get("value_json"), dict) else None,
                 confidence=float(data.get("confidence", 0)),
             )
         except (json.JSONDecodeError, ValueError, TypeError):
             return ParsedRecord(
                 item_name=None, recorded_for=now[:10],
                 value_text=None, value_num=None, value_bool=None,
+                value_json=None,
                 confidence=0.0,
             )
 

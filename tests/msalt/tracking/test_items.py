@@ -83,6 +83,9 @@ def test_seed_defaults_when_empty(storage):
     items = mgr.list_all()
     names = {i["name"] for i in items}
     assert names == {s["name"] for s in DEFAULT_SEEDS}
+    drinking = next(i for i in items if i["name"] == "음주")
+    assert drinking["schema"] == "quantity"
+    assert drinking["unit"] == "g"
 
 
 def test_seed_defaults_no_op_when_not_empty(storage):

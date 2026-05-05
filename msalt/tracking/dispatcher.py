@@ -31,11 +31,14 @@ def _parse_hhmm(s: str) -> tuple[int, int]:
 
 def _question_hint(item: dict) -> str:
     """schema별 짧은 힌트 — batch 라인에 들어감."""
+    name = item["name"]
     schema = item["schema"]
     unit = item.get("unit") or ""
     if schema == "duration":
         return "몇 시간/얼마나?"
     if schema == "quantity":
+        if name == "음주":
+            return "무슨 술, 얼마나?"
         return f"몇 {unit}?" if unit else "얼마나?"
     if schema == "boolean":
         return "했어?"
@@ -49,6 +52,8 @@ def _solo_text(item: dict) -> str:
     if schema == "duration":
         return f"⏰ '{name}' 기록할 시간이야. 얼마나 했는지 알려줘."
     if schema == "quantity":
+        if name == "음주":
+            return f"⏰ '{name}' 기록할 시간이야. 무슨 술을 얼마나 마셨는지 알려줘."
         return f"⏰ '{name}' 기록할 시간이야. 몇 {unit}인지 알려줘."
     if schema == "boolean":
         return f"⏰ '{name}' 했어?"

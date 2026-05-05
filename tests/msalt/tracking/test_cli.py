@@ -53,6 +53,36 @@ def test_record_command(db_path, capsys):
     assert rc == 0
 
 
+def test_record_command_accepts_json_detail(db_path, capsys):
+    s = Storage(db_path)
+    TrackedItemManager(s).add("음주", "quantity", "g", "22:00")
+    rc = run_command(
+        [
+            "record", "음주",
+            "--date", "2026-04-13",
+            "--num", "48.3",
+            "--json",
+            '{"drink_type":"소주","amount":1,"unit":"병","serving_ml":360,'
+            '"abv_percent":17,"alcohol_g":48.3}',
+            "--raw", "소주 1병",
+        ],
+        db_path=db_path,
+    )
+    assert rc == 0
+
+
+def test_record_command_rejects_invalid_json(db_path, capsys):
+    s = Storage(db_path)
+    TrackedItemManager(s).add("음주", "quantity", "g", "22:00")
+    rc = run_command(
+        ["record", "음주", "--date", "2026-04-13", "--json", "{",
+         "--raw", "소주 1병"],
+        db_path=db_path,
+    )
+    assert rc == 2
+    assert "invalid JSON" in capsys.readouterr().err
+
+
 def test_summary_command(db_path, capsys):
     s = Storage(db_path)
     TrackedItemManager(s).add("수면", "duration", None, "08:00")

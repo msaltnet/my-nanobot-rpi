@@ -43,6 +43,7 @@ class Storage:
                 value_text TEXT,
                 value_num REAL,
                 value_bool INTEGER,
+                value_json TEXT,
                 raw_input TEXT NOT NULL,
                 UNIQUE(item_id, recorded_for)
             );
@@ -64,6 +65,9 @@ class Storage:
             conn.execute(
                 "ALTER TABLE tracked_items ADD COLUMN last_asked_at TEXT"
             )
+        record_cols = {row[1] for row in conn.execute("PRAGMA table_info(records)")}
+        if "value_json" not in record_cols:
+            conn.execute("ALTER TABLE records ADD COLUMN value_json TEXT")
         article_cols = {row[1] for row in conn.execute("PRAGMA table_info(news_articles)")}
         if "published_at" not in article_cols:
             conn.execute("ALTER TABLE news_articles ADD COLUMN published_at TEXT")
@@ -221,18 +225,23 @@ class Storage:
                       value_text: str | None = None,
                       value_num: float | None = None,
                       value_bool: bool | None = None,
+                      value_json: str | None = None,
                       raw_input: str = "") -> None:
         conn = self._connect()
         try:
             bool_int = None if value_bool is None else int(bool(value_bool))
             conn.execute(
                 "INSERT INTO records (item_id, recorded_for, value_text, value_num, "
-                "value_bool, raw_input) VALUES (?, ?, ?, ?, ?, ?) "
+                "value_bool, value_json, raw_input) VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(item_id, recorded_for) DO UPDATE SET "
                 "value_text=excluded.value_text, value_num=excluded.value_num, "
-                "value_bool=excluded.value_bool, raw_input=excluded.raw_input, "
+                "value_bool=excluded.value_bool, value_json=excluded.value_json, "
+                "raw_input=excluded.raw_input, "
                 "recorded_at=datetime('now')",
-                (item_id, recorded_for, value_text, value_num, bool_int, raw_input),
+                (
+                    item_id, recorded_for, value_text, value_num, bool_int,
+                    value_json, raw_input,
+                ),
             )
             conn.commit()
         finally:
@@ -276,4 +285,3 @@ class Storage:
             return row is not None
         finally:
             conn.close()
-

@@ -64,6 +64,52 @@ def test_summarize_quantity(setup):
     assert "평균" in summary  # 평균 3잔
 
 
+def test_drinking_record_keeps_structured_detail(setup):
+    _, items, records = setup
+    items.add("음주", "quantity", "g", "22:00")
+    records.upsert(
+        "음주",
+        "2026-04-13",
+        value_num=48.3,
+        value_json={
+            "drink_type": "소주",
+            "amount": 1,
+            "unit": "병",
+            "serving_ml": 360,
+            "abv_percent": 17,
+            "alcohol_g": 48.3,
+        },
+        raw_input="소주 1병",
+    )
+    recs = records.recent("음주", days=1, ref_date="2026-04-13")
+    assert '"drink_type": "소주"' in recs[0]["value_json"]
+    assert recs[0]["value_num"] == 48.3
+    summary = records.summarize("음주", days=7, ref_date="2026-04-13")
+    assert "48.3g" in summary
+    assert "소주 1병" in summary
+
+
+def test_drinking_none_records_zero_alcohol(setup):
+    _, items, records = setup
+    items.add("음주", "quantity", "g", "22:00")
+    records.upsert(
+        "음주",
+        "2026-04-13",
+        value_num=0,
+        value_json={
+            "drink_type": None,
+            "amount": 0,
+            "unit": "잔",
+            "serving_ml": None,
+            "abv_percent": None,
+            "alcohol_g": 0,
+        },
+        raw_input="안 마심",
+    )
+    summary = records.summarize("음주", days=7, ref_date="2026-04-13")
+    assert "0g" in summary
+
+
 def test_summarize_boolean(setup):
     _, items, records = setup
     items.add("운동", "boolean", None, "20:00")
