@@ -12,6 +12,18 @@ RUN_USER="${SUDO_USER:-$USER}"
 echo "  repo dir : ${REPO_DIR}"
 echo "  run user : ${RUN_USER}"
 
+apt_update() {
+    if sudo apt-get update; then
+        return
+    fi
+
+    echo "apt-get update failed. Retrying without command-not-found post-update hooks..."
+    sudo apt-get \
+        -o APT::Update::Post-Invoke::= \
+        -o APT::Update::Post-Invoke-Success::= \
+        update
+}
+
 # 1. swap 설정 (1GB)
 # RPi OS면 dphys-swapfile, 그 외(Ubuntu 등)는 /swapfile 방식으로 폴백.
 echo "Setting up 1GB swap..."
@@ -41,7 +53,7 @@ fi
 
 # 2. Python 3.11+ 설치
 echo "Installing Python 3.11..."
-sudo apt-get update
+apt_update
 sudo apt-get install -y python3.11 python3.11-venv python3.11-dev
 
 # 3. 프로젝트 설정

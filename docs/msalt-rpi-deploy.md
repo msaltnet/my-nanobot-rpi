@@ -202,6 +202,32 @@ cat .env                                # 리포 루트에서 실행
 sudo systemctl restart my-nanobot-rpi    # .env 변경 반영
 ```
 
+### `apt-get update`가 `apt_pkg` 오류로 실패
+
+Ubuntu에서 `deploy/setup-rpi.sh` 실행 중 다음 오류가 나면 `apt-get update` 자체가 아니라
+`command-not-found` DB 갱신 훅이 깨진 상태입니다:
+
+```text
+ModuleNotFoundError: No module named 'apt_pkg'
+E: Problem executing scripts APT::Update::Post-Invoke-Success ...
+```
+
+최신 `setup-rpi.sh`는 이 경우 post-update hook을 끄고 자동 재시도합니다. 이미 실패한 장비에서는 최신 변경을 받은 뒤 다시 실행합니다:
+
+```bash
+git pull
+bash deploy/setup-rpi.sh
+```
+
+수동으로 한 번만 우회하려면:
+
+```bash
+sudo apt-get \
+  -o APT::Update::Post-Invoke::= \
+  -o APT::Update::Post-Invoke-Success::= \
+  update
+```
+
 ### 텔레그램 연결 문제
 
 1. `TELEGRAM_USER_ID`가 **숫자**인지 확인 (핸들 불가)
