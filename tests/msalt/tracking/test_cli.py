@@ -50,6 +50,40 @@ def test_record_command(db_path, capsys):
         db_path=db_path,
     )
     assert rc == 0
+    out = capsys.readouterr().out
+    assert "기록되었어: 수면 2026-04-13" in out
+    assert "최근 7일" in out
+
+
+def test_record_command_outputs_advice(db_path, capsys):
+    s = Storage(db_path)
+    items = TrackedItemManager(s)
+    items.add("음주", "quantity", "g", "22:00")
+    items.add("영어공부", "boolean", None, "22:00")
+    run_command(
+        ["record", "음주", "--date", "2026-04-08", "--num", "20",
+         "--raw", "맥주"],
+        db_path=db_path,
+    )
+    run_command(
+        ["record", "음주", "--date", "2026-04-10", "--num", "30",
+         "--raw", "와인"],
+        db_path=db_path,
+    )
+    capsys.readouterr()
+
+    rc = run_command(
+        ["record", "음주", "--date", "2026-04-13", "--num", "48.3",
+         "--raw", "소주"],
+        db_path=db_path,
+    )
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "최근 7일 음주 3일" in out
+    assert "최근 30일 음주 3일" in out
+    assert "횟수와 양을 조금 줄이는 방향" in out
+    assert "영어공부는 최근 7일과 최근 30일 모두 실천 기록이 없네" in out
 
 
 def test_record_command_accepts_json_detail(db_path, capsys):

@@ -152,7 +152,8 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
         except KeyError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-        print(f"기록: {args.name} {args.date}")
+        print(f"기록되었어: {args.name} {args.date}")
+        print(records.advice_after_record(args.name, args.date))
         return 0
 
     if args.cmd == "summary":

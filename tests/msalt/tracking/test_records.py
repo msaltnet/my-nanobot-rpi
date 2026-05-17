@@ -139,6 +139,79 @@ def test_summarize_no_records(setup):
     assert "기록 없음" in summary or "없" in summary
 
 
+def test_advice_after_record_mentions_frequent_drinking_and_stale_boolean(setup):
+    _, items, records = setup
+    items.add("음주", "quantity", "g", "22:00")
+    items.add("영어공부", "boolean", None, "22:00")
+    records.upsert("음주", "2026-04-08", value_num=20, raw_input="맥주")
+    records.upsert("음주", "2026-04-10", value_num=30, raw_input="와인")
+    records.upsert("음주", "2026-04-13", value_num=48.3, raw_input="소주")
+
+    advice = records.advice_after_record("음주", "2026-04-13")
+
+    assert "최근 7일 음주 3일" in advice
+    assert "최근 30일 음주 3일" in advice
+    assert "횟수와 양을 조금 줄이는 방향" in advice
+    assert "영어공부는 최근 7일과 최근 30일 모두 실천 기록이 없네" in advice
+
+
+def test_advice_after_record_mentions_boolean_not_done(setup):
+    _, items, records = setup
+    items.add("영어공부", "boolean", None, "22:00")
+    records.upsert("영어공부", "2026-04-13", value_bool=False,
+                   raw_input="영어공부 안함")
+
+    advice = records.advice_after_record("영어공부", "2026-04-13")
+
+    assert "영어공부는 최근 7일과 최근 30일 모두 실천 기록이 없네" in advice
+
+
+def test_advice_after_record_encourages_boolean_with_monthly_history(setup):
+    _, items, records = setup
+    items.add("음주", "quantity", "g", "22:00")
+    items.add("영어공부", "boolean", None, "22:00")
+    records.upsert("음주", "2026-04-13", value_num=10, raw_input="맥주")
+    records.upsert("영어공부", "2026-03-25", value_bool=True,
+                   raw_input="영어공부 함")
+
+    advice = records.advice_after_record("음주", "2026-04-13")
+
+    assert "영어공부는 최근 7일 실천 기록은 없지만" in advice
+    assert "최근 30일에는 1번 했네" in advice
+    assert "오늘 10분만 다시 이어보자" in advice
+
+
+def test_advice_after_other_record_mentions_healthy_sleep_range(setup):
+    _, items, records = setup
+    items.add("수면", "duration", None, "08:00")
+    items.add("음주", "quantity", "g", "22:00")
+    records.upsert("수면", "2026-04-11", value_num=450,
+                   raw_input="7시간 30분")
+    records.upsert("수면", "2026-04-12", value_num=480,
+                   raw_input="8시간")
+    records.upsert("음주", "2026-04-13", value_num=10,
+                   raw_input="맥주")
+
+    advice = records.advice_after_record("음주", "2026-04-13")
+
+    assert "수면은 최근 7일 평균" in advice
+    assert "적정 수면시간인 7~9시간 흐름을 계속 유지해보자" in advice
+
+
+def test_advice_after_record_guides_short_sleep_toward_healthy_range(setup):
+    _, items, records = setup
+    items.add("수면", "duration", None, "08:00")
+    records.upsert("수면", "2026-04-12", value_num=330,
+                   raw_input="5시간 30분")
+    records.upsert("수면", "2026-04-13", value_num=360,
+                   raw_input="6시간")
+
+    advice = records.advice_after_record("수면", "2026-04-13")
+
+    assert "적정 수면시간인 7~9시간에 가까워지도록" in advice
+    assert "잠을 조금 더 확보해보자" in advice
+
+
 def test_recent_returns_empty_for_unknown_item(setup):
     _, _, records = setup
     with pytest.raises(KeyError):
