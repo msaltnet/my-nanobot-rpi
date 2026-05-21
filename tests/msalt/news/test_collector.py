@@ -13,8 +13,8 @@ def mock_storage():
 
 
 @patch("msalt.news.collector.RssCollector")
-def test_collect_all_stores_articles(MockRss, mock_storage):
-    mock_rss = MockRss.return_value
+def test_collect_all_stores_articles(mock_rss_cls, mock_storage):
+    mock_rss = mock_rss_cls.return_value
     mock_rss.collect_all.return_value = [
         {
             "source": "한경",
@@ -41,8 +41,8 @@ def test_collect_all_stores_articles(MockRss, mock_storage):
 
 
 @patch("msalt.news.collector.RssCollector")
-def test_collect_passes_none_when_published_at_missing(MockRss, mock_storage):
-    mock_rss = MockRss.return_value
+def test_collect_passes_none_when_published_at_missing(mock_rss_cls, mock_storage):
+    mock_rss = mock_rss_cls.return_value
     mock_rss.collect_all.return_value = [
         {
             "source": "a",
@@ -67,8 +67,8 @@ def test_collect_passes_none_when_published_at_missing(MockRss, mock_storage):
 
 
 @patch("msalt.news.collector.RssCollector")
-def test_collect_returns_count(MockRss, mock_storage):
-    mock_rss = MockRss.return_value
+def test_collect_returns_count(mock_rss_cls, mock_storage):
+    mock_rss = mock_rss_cls.return_value
     mock_rss.collect_all.return_value = [
         {"source": "a", "title": "t1", "url": "https://1.com", "summary": "s", "category": "domestic", "published": "", "published_at": None},
         {"source": "b", "title": "t2", "url": "https://2.com", "summary": "s", "category": "international", "published": "", "published_at": None},
@@ -77,3 +77,17 @@ def test_collect_returns_count(MockRss, mock_storage):
     collector = NewsCollector(storage=mock_storage, sources_path="dummy.json")
     count = collector.collect()
     assert count == 2
+
+
+@patch("msalt.news.collector.RssCollector")
+def test_collect_counts_only_inserted_articles(mock_rss_cls, mock_storage):
+    mock_rss = mock_rss_cls.return_value
+    mock_rss.collect_all.return_value = [
+        {"source": "a", "title": "t1", "url": "https://1.com", "summary": "s", "category": "domestic", "published_at": None},
+        {"source": "b", "title": "t2", "url": "https://2.com", "summary": "s", "category": "domestic", "published_at": None},
+    ]
+    mock_storage.insert_article.side_effect = [True, False]
+
+    collector = NewsCollector(storage=mock_storage, sources_path="dummy.json")
+
+    assert collector.collect() == 1

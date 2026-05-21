@@ -1,5 +1,4 @@
 import sqlite3
-from pathlib import Path
 
 import pytest
 
@@ -25,13 +24,14 @@ def test_initialize_creates_news_articles_table(db):
 
 
 def test_insert_and_get_article(db):
-    db.insert_article(
+    inserted = db.insert_article(
         source="hankyung",
         title="테스트 기사",
         url="https://example.com/1",
         summary="요약 내용",
         category="domestic",
     )
+    assert inserted is True
     articles = db.get_articles_since("2020-01-01")
     assert len(articles) == 1
     assert articles[0]["title"] == "테스트 기사"
@@ -39,8 +39,8 @@ def test_insert_and_get_article(db):
 
 
 def test_duplicate_url_ignored(db):
-    db.insert_article("src", "제목1", "https://example.com/1", "요약1", "domestic")
-    db.insert_article("src", "제목2", "https://example.com/1", "요약2", "domestic")
+    assert db.insert_article("src", "제목1", "https://example.com/1", "요약1", "domestic") is True
+    assert db.insert_article("src", "제목2", "https://example.com/1", "요약2", "domestic") is False
     articles = db.get_articles_since("2020-01-01")
     assert len(articles) == 1
 

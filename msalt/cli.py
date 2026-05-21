@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -94,22 +95,119 @@ def _seed_if_missing() -> list[str]:
             if not skill_dir.is_dir():
                 continue
             target = skills_target_root / skill_dir.name
-            if not target.exists():
-                shutil.copytree(skill_dir, target)
+            if _sync_seed_dir(skill_dir, target):
                 created.append(str(target))
 
     # 크론 잡 seed — 아침/저녁 자동 브리핑.
     # jobs.json은 env var 치환을 지원하지 않아 seed 시점에 직접 ${TELEGRAM_USER_ID}를 박는다.
     cron_target = workspace_dir / "cron" / "jobs.json"
-    if not cron_target.exists() and SEED_CRON_JOBS.exists():
-        cron_target.parent.mkdir(parents=True, exist_ok=True)
-        body = SEED_CRON_JOBS.read_text(encoding="utf-8")
-        tg_id = os.environ.get("TELEGRAM_USER_ID", "").strip()
-        if tg_id:
-            body = body.replace("${TELEGRAM_USER_ID}", tg_id)
-        cron_target.write_text(body, encoding="utf-8")
+    if SEED_CRON_JOBS.exists() and _sync_seed_cron_jobs(cron_target):
         created.append(str(cron_target))
     return created
+
+
+def _sync_seed_dir(seed_dir: Path, target_dir: Path) -> bool:
+    """패키지에 포함된 관리 스킬을 workspace로 동기화한다.
+
+    최초 seed 이후에도 SKILL.md의 실행 명령이 바뀔 수 있으므로, source에 있는 파일은
+    target에 없거나 내용이 다를 때 덮어쓴다. 사용자가 target에 추가한 파일은 건드리지 않는다.
+    """
+    changed = False
+    if not target_dir.exists():
+        shutil.copytree(seed_dir, target_dir)
+        return True
+
+    for source in seed_dir.rglob("*"):
+        rel = source.relative_to(seed_dir)
+        target = target_dir / rel
+        if source.is_dir():
+            if not target.exists():
+                target.mkdir(parents=True, exist_ok=True)
+                changed = True
+            continue
+
+        if not target.exists() or source.read_bytes() != target.read_bytes():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            changed = True
+
+    return changed
+
+
+def _sync_seed_cron_jobs(cron_target: Path) -> bool:
+    """msalt가 관리하는 cron job을 최신 템플릿으로 갱신한다.
+
+    기존 파일의 다른 job은 유지하고, msalt-news-* job은 최신 schedule/payload로 맞춘다.
+    사용자가 job을 비활성화한 상태와 실행 state는 보존한다.
+    """
+    cron_target.parent.mkdir(parents=True, exist_ok=True)
+    body = SEED_CRON_JOBS.read_text(encoding="utf-8")
+    tg_id = os.environ.get("TELEGRAM_USER_ID", "").strip()
+    if tg_id:
+        body = body.replace("${TELEGRAM_USER_ID}", tg_id)
+    seed_data = json.loads(body)
+
+    if not cron_target.exists():
+        cron_target.write_text(
+            json.dumps(seed_data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return True
+
+    try:
+        existing_data = json.loads(cron_target.read_text(encoding="utf-8"))
+    except Exception:
+        backup = cron_target.with_suffix(cron_target.suffix + ".bak")
+        shutil.copy2(cron_target, backup)
+        cron_target.write_text(
+            json.dumps(seed_data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return True
+
+    seed_by_id = {job.get("id"): job for job in seed_data.get("jobs", []) if job.get("id")}
+    existing_jobs = existing_data.get("jobs", [])
+    rewritten_jobs = []
+    seen_seed_ids = set()
+
+    for existing in existing_jobs:
+        job_id = existing.get("id")
+        if job_id not in seed_by_id:
+            rewritten_jobs.append(existing)
+            continue
+
+        updated = json.loads(json.dumps(seed_by_id[job_id], ensure_ascii=False))
+        seen_seed_ids.add(job_id)
+
+        for key in ("enabled", "state", "createdAtMs", "updatedAtMs", "deleteAfterRun"):
+            if key in existing:
+                updated[key] = existing[key]
+
+        if not tg_id:
+            existing_to = existing.get("payload", {}).get("to")
+            if existing_to and existing_to != "${TELEGRAM_USER_ID}":
+                updated.setdefault("payload", {})["to"] = existing_to
+
+        rewritten_jobs.append(updated)
+
+    for job_id, job in seed_by_id.items():
+        if job_id not in seen_seed_ids:
+            rewritten_jobs.append(job)
+
+    updated_data = dict(existing_data)
+    updated_data["version"] = seed_data.get("version", existing_data.get("version", 1))
+    updated_data["jobs"] = rewritten_jobs
+
+    old_text = json.dumps(existing_data, ensure_ascii=False, indent=2, sort_keys=True)
+    new_text = json.dumps(updated_data, ensure_ascii=False, indent=2, sort_keys=True)
+    if old_text == new_text:
+        return False
+
+    cron_target.write_text(
+        json.dumps(updated_data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return True
 
 
 def _check_env() -> list[str]:
@@ -222,14 +320,25 @@ def doctor() -> None:
         console.print(f"[red]✗[/red] cron jobs.json 없음: {cron_path}")
 
     # 7. RSS 소스 점검
-    console.print("\n[bold]RSS 소스 점검[/bold]")
-    from msalt.news.smoke import check_rss
+    console.print("\n[bold]뉴스 소스 점검[/bold]")
+    from msalt.news.smoke import check_fallback, check_official, check_rss, check_search
     sources_path = str(HERE / "news" / "sources.json")
-    ok, total = check_rss(sources_path)
-    if ok == total and total > 0:
-        console.print(f"\n[green]✓[/green] 모든 소스 정상 ({ok}/{total})")
+    rss_ok, rss_total = check_rss(sources_path)
+    official_ok, official_total = check_official(sources_path)
+    search_ok, search_total = check_search(sources_path)
+    fallback_ok, fallback_total = check_fallback(sources_path)
+
+    required_ok = (
+        rss_ok == rss_total
+        and official_ok == official_total
+        and fallback_ok == fallback_total
+        and rss_total > 0
+    )
+    search_ok_or_skipped = search_total == 0 or search_ok == search_total
+    if required_ok and search_ok_or_skipped:
+        console.print("\n[green]✓[/green] 뉴스 소스 정상")
     else:
-        console.print(f"\n[yellow]⚠[/yellow] 일부 소스 실패 ({ok}/{total})")
+        console.print("\n[yellow]⚠[/yellow] 일부 뉴스 소스 실패")
 
     if missing or not config_path.exists():
         raise typer.Exit(code=1)

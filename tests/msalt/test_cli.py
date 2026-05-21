@@ -1,11 +1,9 @@
+import json
 import os
-from pathlib import Path
-from unittest.mock import patch
 
 from typer.testing import CliRunner
 
 from msalt.cli import _check_env, _load_env_file, _seed_if_missing, app
-
 
 runner = CliRunner()
 
@@ -97,6 +95,73 @@ def test_seed_copies_skills_so_agent_can_find_them(tmp_path, monkeypatch):
     assert (skills_root / "news" / "SKILL.md").exists()
     assert (skills_root / "news-briefing" / "SKILL.md").exists()
     assert (skills_root / "tracking" / "SKILL.md").exists()
+
+
+def test_seed_updates_existing_msalt_skills(tmp_path, monkeypatch):
+    monkeypatch.setattr("msalt.cli.NANOBOT_HOME", tmp_path / "nano")
+    skill = tmp_path / "nano" / "workspace" / "skills" / "news-briefing" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(
+        "```bash\npython -m msalt.news.cli collect\n```\n",
+        encoding="utf-8",
+    )
+
+    created = _seed_if_missing()
+
+    assert str(skill.parent) in created
+    text = skill.read_text(encoding="utf-8")
+    assert "my-nanobot-rpi news collect" in text
+    assert "python -m msalt.news.cli collect" not in text
+
+
+def test_seed_updates_existing_msalt_cron_jobs(tmp_path, monkeypatch):
+    monkeypatch.setattr("msalt.cli.NANOBOT_HOME", tmp_path / "nano")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "123456789")
+    jobs_file = tmp_path / "nano" / "workspace" / "cron" / "jobs.json"
+    jobs_file.parent.mkdir(parents=True)
+    jobs_file.write_text(
+        json.dumps({
+            "version": 1,
+            "jobs": [
+                {
+                    "id": "msalt-news-briefing-morning",
+                    "name": "msalt-news-briefing-morning",
+                    "enabled": False,
+                    "schedule": {"kind": "cron", "expr": "0 7 * * *", "tz": "Asia/Seoul"},
+                    "payload": {
+                        "kind": "agent_turn",
+                        "message": "아침 경제 브리핑을 만들어서 보내줘. news-briefing 스킬 사용.",
+                        "deliver": True,
+                        "channel": "telegram",
+                        "to": "msalt_net",
+                    },
+                    "state": {"lastRun": 1},
+                    "createdAtMs": 11,
+                    "updatedAtMs": 22,
+                    "deleteAfterRun": False,
+                },
+                {
+                    "id": "custom-job",
+                    "enabled": True,
+                    "payload": {"message": "keep me"},
+                },
+            ],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    created = _seed_if_missing()
+
+    assert str(jobs_file) in created
+    data = json.loads(jobs_file.read_text(encoding="utf-8"))
+    jobs = {j["id"]: j for j in data["jobs"]}
+    morning = jobs["msalt-news-briefing-morning"]
+    assert "서론·확인 문구 없이" in morning["payload"]["message"]
+    assert morning["payload"]["to"] == "123456789"
+    assert morning["enabled"] is False
+    assert morning["state"] == {"lastRun": 1}
+    assert jobs["custom-job"]["payload"]["message"] == "keep me"
+    assert "msalt-news-briefing-evening" in jobs
 
 
 def test_seed_is_idempotent(tmp_path, monkeypatch):

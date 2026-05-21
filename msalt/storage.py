@@ -88,16 +88,17 @@ class Storage:
         summary: str,
         category: str,
         published_at: str | None = None,
-    ):
+    ) -> bool:
         conn = self._connect()
         try:
-            conn.execute(
+            cursor = conn.execute(
                 "INSERT OR IGNORE INTO news_articles "
                 "(source, title, url, summary, category, published_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (source, title, url, summary, category, published_at),
             )
             conn.commit()
+            return cursor.rowcount > 0
         finally:
             conn.close()
 

@@ -36,5 +36,103 @@
       "category": "policy",
       "limit": 10
     }
+  ],
+  "official_rss": [
+    {
+      "name": "한국은행 보도자료",
+      "url": "https://www.bok.or.kr/portal/bbs/B0000552/news.rss?menuNo=200690",
+      "category": "policy",
+      "limit": 20
+    },
+    {
+      "name": "한국은행 통화정책",
+      "url": "https://www.bok.or.kr/portal/bbs/P0000559/news.rss?menuNo=200690",
+      "category": "policy",
+      "limit": 20
+    },
+    {
+      "name": "금융위원회 보도자료",
+      "url": "https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111",
+      "category": "policy",
+      "limit": 20
+    }
+  ],
+  "search": [
+    {
+      "name": "Tavily 국내 경제",
+      "provider": "tavily",
+      "query": "한국 경제 금리 환율 증시 기업 실적 정책",
+      "category": "domestic",
+      "topic": "news",
+      "days": 1,
+      "max_results": 10,
+      "assume_current_if_missing": true
+    },
+    {
+      "name": "Tavily 글로벌 경제",
+      "provider": "tavily",
+      "query": "global economy markets central banks inflation earnings",
+      "category": "international",
+      "topic": "news",
+      "days": 1,
+      "max_results": 10,
+      "assume_current_if_missing": true
+    },
+    {
+      "name": "Brave 국내 경제",
+      "provider": "brave",
+      "query": "한국 경제 금리 환율 증시 기업 실적",
+      "category": "domestic",
+      "count": 10,
+      "freshness": "pd",
+      "country": "kr",
+      "search_lang": "ko",
+      "assume_current_if_missing": true
+    },
+    {
+      "name": "Brave 글로벌 경제",
+      "provider": "brave",
+      "query": "global economy markets fed inflation earnings",
+      "category": "international",
+      "count": 10,
+      "freshness": "pd",
+      "country": "us",
+      "search_lang": "en",
+      "assume_current_if_missing": true
+    }
+  ],
+  "fallback": [
+    {
+      "name": "한국경제 경제 섹션",
+      "url": "https://www.hankyung.com/economy",
+      "category": "domestic",
+      "limit": 20,
+      "link_patterns": ["/article/"],
+      "assume_current_if_missing": true
+    },
+    {
+      "name": "매일경제 경제 섹션",
+      "url": "https://www.mk.co.kr/news/economy/",
+      "category": "domestic",
+      "limit": 20,
+      "link_patterns": ["/news/economy/"],
+      "assume_current_if_missing": true
+    },
+    {
+      "name": "경향신문 경제 섹션",
+      "url": "https://www.khan.co.kr/economy",
+      "category": "domestic",
+      "limit": 20,
+      "link_patterns": ["/article/"],
+      "assume_current_if_missing": true
+    },
+    {
+      "name": "BBC Business 섹션",
+      "url": "https://www.bbc.com/news/business",
+      "category": "international",
+      "limit": 20,
+      "link_patterns": ["/news/articles/", "/news/business-"],
+      "assume_current_if_missing": true
+    }
   ]
 }

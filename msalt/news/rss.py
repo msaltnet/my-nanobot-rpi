@@ -8,6 +8,8 @@ from pathlib import Path
 import feedparser
 import httpx
 
+from msalt.news.utils import clean_text
+
 logger = logging.getLogger(__name__)
 
 # Reddit 등 UA 없이는 403을 반환하는 엔드포인트가 있어 명시한다.
@@ -63,9 +65,9 @@ class RssCollector:
                 continue
             articles.append({
                 "source": source["name"],
-                "title": title,
+                "title": clean_text(title),
                 "url": entry.link,
-                "summary": entry.get("summary", ""),
+                "summary": clean_text(entry.get("summary", "")),
                 "category": source["category"],
                 "published": entry.get("published", ""),
                 "published_at": _normalize_published(entry),
