@@ -19,13 +19,20 @@ def test_run_collect(MockStorage, MockCollector):
 
 
 @patch("msalt.news.cli.BriefingGenerator")
+@patch("msalt.news.cli.NewsCollector")
 @patch("msalt.news.cli.Storage")
-def test_run_briefing(MockStorage, MockGenerator):
+def test_run_briefing_collects_before_formatting(MockStorage, MockCollector, MockGenerator):
+    mock_storage = MockStorage.return_value
+    mock_collector = MockCollector.return_value
     mock_gen = MockGenerator.return_value
     mock_gen.format_briefing.return_value = "아침 경제 브리핑 (2026-04-12)\n..."
 
     result = run_briefing("morning")
     assert "아침 경제 브리핑" in result
+    MockCollector.assert_called_once_with(storage=mock_storage)
+    mock_collector.collect.assert_called_once()
+    MockGenerator.assert_called_once_with(storage=mock_storage)
+    mock_gen.format_briefing.assert_called_once_with("morning")
 
 
 @patch("msalt.news.cli.Storage")

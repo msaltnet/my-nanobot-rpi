@@ -23,6 +23,8 @@ def run_collect() -> str:
 
 def run_briefing(time_of_day: str = "morning") -> str:
     storage = _get_storage()
+    collector = NewsCollector(storage=storage)
+    collector.collect()
     gen = BriefingGenerator(storage=storage)
     return gen.format_briefing(time_of_day)
 
