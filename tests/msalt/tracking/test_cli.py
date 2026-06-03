@@ -1,8 +1,7 @@
-from unittest.mock import patch
 import pytest
 
-from msalt.tracking.cli import build_parser, run_command
 from msalt.storage import Storage
+from msalt.tracking.cli import _make_reply_markup, _make_telegram_sender, run_command
 from msalt.tracking.items import TrackedItemManager
 
 
@@ -111,6 +110,40 @@ def test_dispatch_command_invokes_dispatcher(db_path, capsys, monkeypatch):
                      db_path=db_path)
     assert rc == 0
     assert any("수면" in m for m in sent)
+
+
+def test_make_reply_markup_builds_keyboard():
+    markup = _make_reply_markup([["수면 7시간", "수면 8시간"]])
+    assert markup["keyboard"][0][0]["text"] == "수면 7시간"
+    assert markup["keyboard"][0][1]["text"] == "수면 8시간"
+    assert markup["resize_keyboard"] is True
+    assert markup["one_time_keyboard"] is True
+
+
+def test_make_reply_markup_removes_keyboard_when_empty():
+    assert _make_reply_markup(None) == {"remove_keyboard": True}
+
+
+def test_telegram_sender_posts_reply_markup(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "123")
+    posted = {}
+
+    def fake_post(url, json, timeout):
+        posted["url"] = url
+        posted["json"] = json
+        posted["timeout"] = timeout
+
+    monkeypatch.setattr("msalt.tracking.cli.httpx.post", fake_post)
+
+    sender = _make_telegram_sender()
+    sender("질문", [["수면 7시간", "수면 8시간"]])
+
+    assert posted["url"] == "https://api.telegram.org/bottoken/sendMessage"
+    assert posted["json"]["chat_id"] == "123"
+    assert posted["json"]["text"] == "질문"
+    assert posted["json"]["reply_markup"]["keyboard"][0][0]["text"] == "수면 7시간"
+    assert posted["timeout"] == 10
 
 
 def test_first_run_seeds_defaults(tmp_path, capsys):

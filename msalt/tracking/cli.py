@@ -12,11 +12,11 @@ from typing import Callable
 import httpx
 
 from msalt.storage import Storage
+from msalt.tracking.dispatcher import Dispatcher, ReplyKeyboard
 from msalt.tracking.items import (
     TrackedItemManager, ItemAlreadyExists, ItemNotFound,
 )
 from msalt.tracking.records import RecordManager
-from msalt.tracking.dispatcher import Dispatcher
 
 
 DEFAULT_DB = str(Path.home() / ".nanobot" / "workspace" / "msalt.db")
@@ -62,13 +62,34 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _make_telegram_sender() -> Callable[[str], None]:
+def _make_reply_markup(reply_keyboard: ReplyKeyboard | None) -> dict[str, object]:
+    if not reply_keyboard:
+        return {"remove_keyboard": True}
+    return {
+        "keyboard": [
+            [{"text": button} for button in row]
+            for row in reply_keyboard
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": True,
+    }
+
+
+def _make_telegram_sender() -> Callable[[str, ReplyKeyboard | None], None]:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_USER_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
 
-    def send(text: str) -> None:
-        httpx.post(url, json={"chat_id": chat_id, "text": text}, timeout=10)
+    def send(text: str, reply_keyboard: ReplyKeyboard | None = None) -> None:
+        httpx.post(
+            url,
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "reply_markup": _make_reply_markup(reply_keyboard),
+            },
+            timeout=10,
+        )
 
     return send
 

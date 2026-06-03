@@ -1,9 +1,11 @@
 """디스패처: schedule 슬롯 도래 + pending 항목 retry를 batch로 텔레그램 발송."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Literal
+from inspect import Parameter, signature
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from msalt.tracking.items import TrackedItemManager
@@ -15,6 +17,7 @@ WINDOW_MINUTES = 30
 RECENT_HOURS = 24
 GLOBAL_RETRY_SLOTS = ["09:00", "14:00", "20:00"]   # KST
 UTC_TS_FORMAT = "%Y-%m-%d %H:%M:%S"
+ReplyKeyboard = list[list[str]]
 
 
 @dataclass
@@ -22,6 +25,7 @@ class DispatchMessage:
     kind: Literal["scheduled", "retry"]
     item_name: str
     text: str   # 항목 단독 톤 텍스트 (batch 합치기 전 단계)
+    reply_keyboard: ReplyKeyboard | None = None
 
 
 def _parse_hhmm(s: str) -> tuple[int, int]:
@@ -70,6 +74,67 @@ def _format_batch(items: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _prefixed(item: dict, answer: str) -> str:
+    return f"{item['name']} {answer}"
+
+
+def _rows(item: dict, answers: list[str], columns: int = 2) -> ReplyKeyboard:
+    buttons = [_prefixed(item, answer) for answer in answers]
+    return [buttons[i:i + columns] for i in range(0, len(buttons), columns)]
+
+
+def _reply_keyboard_for_item(item: dict) -> ReplyKeyboard:
+    """항목 schema에 맞춰, 누르면 그대로 기록 의도가 되는 버튼을 만든다."""
+    name = item["name"]
+    schema = item["schema"]
+
+    if schema == "duration":
+        answers = (
+            ["6시간", "7시간", "8시간", "9시간"]
+            if name == "수면"
+            else ["30분", "1시간", "2시간", "3시간"]
+        )
+        return _rows(item, answers)
+
+    if schema == "quantity":
+        if name == "음주":
+            return [
+                [_prefixed(item, "안 마심")],
+                [_prefixed(item, "맥주 1캔"), _prefixed(item, "소주 1병")],
+                [_prefixed(item, "와인 1잔"), _prefixed(item, "하이볼 1잔")],
+            ]
+        unit = item.get("unit") or ""
+        return _rows(item, [f"0{unit}", f"1{unit}", f"2{unit}", f"3{unit}"])
+
+    if schema == "boolean":
+        return [[_prefixed(item, "했어"), _prefixed(item, "안 했어")]]
+
+    return []
+
+
+def _reply_keyboard_for_items(items: list[dict]) -> ReplyKeyboard | None:
+    rows: ReplyKeyboard = []
+    for item in items:
+        rows.extend(_reply_keyboard_for_item(item))
+    return rows or None
+
+
+def _sender_accepts_reply_keyboard(send: Callable[..., None]) -> bool:
+    """테스트/기존 호출부의 1-인자 sender와 새 2-인자 sender를 모두 지원한다."""
+    try:
+        sig = signature(send)
+    except (TypeError, ValueError):
+        return True
+    params = list(sig.parameters.values())
+    if any(p.kind == Parameter.VAR_POSITIONAL for p in params):
+        return True
+    positional = [
+        p for p in params
+        if p.kind in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    return len(positional) >= 2
+
+
 def _next_schedule_slot_after(item: dict, after_utc: str) -> datetime:
     """item.schedule_time(KST)이 after_utc 시각보다 미래의 가장 가까운 KST datetime을 반환."""
     h, m = _parse_hhmm(item["schedule_time"])
@@ -94,10 +159,16 @@ def _retry_slot_in_window(now_kst: datetime, window_start_kst: datetime) -> date
 
 class Dispatcher:
     def __init__(self, items: TrackedItemManager, records: RecordManager,
-                 telegram_send: Callable[[str], None]):
+                 telegram_send: Callable[..., None]):
         self.items = items
         self.records = records
         self.send = telegram_send
+
+    def _send_batch(self, text: str, reply_keyboard: ReplyKeyboard | None) -> None:
+        if _sender_accepts_reply_keyboard(self.send):
+            self.send(text, reply_keyboard)
+        else:
+            self.send(text)
 
     def run(self, now: datetime) -> list[DispatchMessage]:
         if now.tzinfo is None:
@@ -147,6 +218,7 @@ class Dispatcher:
                     batch_messages.append(DispatchMessage(
                         kind="scheduled", item_name=it["name"],
                         text=_solo_text(it),
+                        reply_keyboard=_reply_keyboard_for_item(it) or None,
                     ))
                 continue
 
@@ -158,11 +230,15 @@ class Dispatcher:
                     batch_messages.append(DispatchMessage(
                         kind="retry", item_name=it["name"],
                         text=_solo_text(it),
+                        reply_keyboard=_reply_keyboard_for_item(it) or None,
                     ))
 
         # 5. 한 메시지로 묶어 발송
         if batch_items:
-            self.send(_format_batch(batch_items))
+            self._send_batch(
+                _format_batch(batch_items),
+                _reply_keyboard_for_items(batch_items),
+            )
             for it in batch_items:
                 if not it.get("pending_since"):
                     storage.set_pending_since(it["id"], now_utc_str)

@@ -73,6 +73,18 @@ dispatcher가 여러 항목을 한 메시지로 묶어 보낼 수 있다. 예:
 
 사용자가 `"7시간 잤고 2잔 마셨어, 영어 했어"` 같이 한 번에 답하면 **각 항목별로 record CLI를 한 번씩 호출**한다. 부분 답("수면만 7시간")이면 매칭된 항목만 기록하고 나머지는 건드리지 않는다 (다음 retry 슬롯에서 다시 묻게 됨).
 
+### 키보드 버튼 답변
+
+dispatcher는 schema별 Telegram reply keyboard 버튼을 보낼 수 있다. 버튼을 누른 메시지는 일반 텍스트와 똑같이 처리한다. 버튼 텍스트에는 보통 항목명이 포함된다.
+
+- `"수면 7시간"` → `--num 420`
+- `"독서 30분"` → `--num 30`
+- `"물 2잔"`처럼 quantity 항목이면 → `--num 2`
+- `"음주 안 마심"` / `"음주 안 마셨어"` → `--num 0 --json '{"drink_type":null,"amount":0,"unit":"잔","serving_ml":null,"abv_percent":null,"alcohol_g":0}'`
+- `"음주 맥주 1캔"` / `"음주 소주 1병"` 등은 순알코올 g으로 환산해서 `--num <g>`와 구조화 JSON을 같이 기록한다.
+- `"영어공부 했어"` → `--bool`
+- `"영어공부 안 했어"` → `--no-bool`
+
 ### boolean 부정 답
 
 boolean schema 항목에서 사용자가 "아니" / "안 했어" / "no" / "패스" 등 부정 의미를 표현하면 `--no-bool`로 기록한다. 예: "영어공부 안 했어" → `my-nanobot-rpi tracking record 영어공부 --date YYYY-MM-DD --no-bool --raw "영어공부 안 했어"`.

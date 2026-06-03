@@ -177,6 +177,37 @@ def test_single_item_uses_solo_format(setup):
     assert "수면" in sent_text
 
 
+def test_single_item_sends_schema_keyboard(setup):
+    """단일 항목도 schema에 맞는 reply keyboard를 함께 보낸다."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    msgs = d.run(now=_kst(2026, 5, 1, 22, 5))
+    keyboard = send.call_args.args[1]
+    assert ["수면 6시간", "수면 7시간"] in keyboard
+    assert ["수면 8시간", "수면 9시간"] in keyboard
+    assert msgs[0].reply_keyboard == keyboard
+
+
+def test_batch_keyboard_includes_item_names(setup):
+    """묶음 알림 버튼은 누른 텍스트만으로도 항목 매칭되도록 항목명을 포함한다."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    items.add("음주", "quantity", "g", "22:00")
+    items.add("영어공부", "boolean", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))
+    keyboard = send.call_args.args[1]
+    flat = [button for row in keyboard for button in row]
+    assert "수면 7시간" in flat
+    assert "음주 안 마심" in flat
+    assert "음주 맥주 1캔" in flat
+    assert "영어공부 했어" in flat
+    assert "영어공부 안 했어" in flat
+
+
 def test_batch_includes_first_alert_and_retry_in_same_tick(setup):
     """09:00에 첫 알림인 항목 + 09:00 retry 슬롯에 걸린 미답 항목이 한 메시지로 묶임."""
     s, items, records = setup
