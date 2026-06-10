@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from msalt.storage import Storage
 
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "gpt-5-mini"
 MAX_ARTICLES_PER_CATEGORY = 10
 DEFAULT_WINDOW_HOURS = 36  # 저녁 브리핑이 어제 저녁부터 오늘까지를 커버
+BRIEFING_TZ = ZoneInfo("Asia/Seoul")
 
 CATEGORY_LABELS = {
     "domestic": "국내",
@@ -50,6 +52,8 @@ class BriefingGenerator:
         hours: int = DEFAULT_WINDOW_HOURS,
         *,
         require_published_at: bool = True,
+        exclude_briefed: bool = True,
+        since_date: str | None = None,
     ) -> list[dict]:
         """``hours`` 시간 이내 기사를 반환.
 
@@ -58,10 +62,15 @@ class BriefingGenerator:
         published_at은 원본 시각이라 윈도우 밖이면 자연 컷.
         """
         # SQLite datetime('now') = UTC, RSS published_at도 UTC로 정규화되어 들어옴.
-        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+        since = since_date or (
+            datetime.now(timezone.utc) - timedelta(hours=hours)
+        ).strftime("%Y-%m-%d %H:%M:%S")
         articles = self.storage.get_articles_since(
             since, require_published_at=require_published_at
         )
+        if exclude_briefed:
+            articles = self._exclude_briefed_articles(articles)
+
         seen_urls = set()
         unique = []
         for article in articles:
@@ -70,8 +79,10 @@ class BriefingGenerator:
                 unique.append(article)
         return unique
 
-    def format_briefing(self, time_of_day: str = "morning") -> str:
-        articles = self.get_articles_for_briefing()
+    def format_briefing(self, time_of_day: str = "morning", *, mark_as_briefed: bool = True) -> str:
+        articles = self.get_articles_for_briefing(
+            since_date=_briefing_since_utc(time_of_day)
+        )
         label = "아침" if time_of_day == "morning" else "저녁"
 
         if not articles:
@@ -79,6 +90,7 @@ class BriefingGenerator:
 
         today = datetime.now().strftime("%Y-%m-%d")
         lines = [f"{label} 경제 브리핑 ({today})", ""]
+        rendered_urls = []
 
         for category in CATEGORY_ORDER:
             bucket = [a for a in articles if a["category"] == category][:MAX_ARTICLES_PER_CATEGORY]
@@ -87,8 +99,20 @@ class BriefingGenerator:
             lines.append(f"[{CATEGORY_LABELS[category]}]")
             lines.append(self._render_category(bucket))
             lines.append("")
+            rendered_urls.extend(a["url"] for a in bucket)
 
-        return "\n".join(lines).rstrip() + "\n"
+        text = "\n".join(lines).rstrip() + "\n"
+        if mark_as_briefed:
+            self.storage.mark_articles_briefed(rendered_urls, f"{today}:{time_of_day}")
+        return text
+
+    def _exclude_briefed_articles(self, articles: list[dict]) -> list[dict]:
+        urls = [a["url"] for a in articles if a.get("url")]
+        briefed_urls = self.storage.get_briefed_article_urls(urls)
+        if not isinstance(briefed_urls, (set, list, tuple)):
+            briefed_urls = set()
+        briefed_urls = set(briefed_urls)
+        return [a for a in articles if a.get("url") not in briefed_urls]
 
     def _render_category(self, articles: list[dict]) -> str:
         if self.use_llm:
@@ -136,6 +160,23 @@ def _build_user_prompt(articles: list[dict]) -> str:
             snippet += f" — {summary}"
         lines.append(snippet)
     return "\n".join(lines)
+
+
+def _briefing_since_utc(time_of_day: str, now: datetime | None = None) -> str:
+    """아침/저녁 브리핑이 서로 같은 기사를 다시 보지 않도록 시간창을 나눈다."""
+    current = now or datetime.now(BRIEFING_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=BRIEFING_TZ)
+    current = current.astimezone(BRIEFING_TZ)
+
+    if time_of_day == "morning":
+        local_since = (current - timedelta(days=1)).replace(
+            hour=19, minute=0, second=0, microsecond=0
+        )
+    else:
+        local_since = current.replace(hour=7, minute=0, second=0, microsecond=0)
+
+    return local_since.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _format_sources(articles: list[dict]) -> str:

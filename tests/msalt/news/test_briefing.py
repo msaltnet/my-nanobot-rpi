@@ -1,8 +1,10 @@
+from datetime import datetime
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from msalt.news.briefing import BriefingGenerator
+from msalt.news.briefing import BriefingGenerator, _briefing_since_utc
 
 
 @pytest.fixture
@@ -12,6 +14,7 @@ def mock_storage():
         {"source": "한경", "title": "경제 성장률 상승", "url": "https://hk.com/1", "summary": "2분기 성장률 전망", "category": "domestic", "collected_at": "2026-04-12 07:00:00", "published_at": "2026-04-12 06:30:00"},
         {"source": "Reuters", "title": "Fed holds rates", "url": "https://reuters.com/1", "summary": "Federal Reserve holds interest rates", "category": "international", "collected_at": "2026-04-12 07:00:00", "published_at": "2026-04-12 05:45:00"},
     ]
+    storage.get_briefed_article_urls.return_value = set()
     return storage
 
 
@@ -70,6 +73,40 @@ def test_get_articles_for_briefing_can_include_null_published(mock_storage):
     assert kwargs.get("require_published_at") is False
 
 
+def test_get_articles_for_briefing_excludes_already_briefed_urls(mock_storage):
+    mock_storage.get_briefed_article_urls.return_value = {"https://hk.com/1"}
+    gen = BriefingGenerator(storage=mock_storage, use_llm=False)
+
+    articles = gen.get_articles_for_briefing()
+
+    assert [a["url"] for a in articles] == ["https://reuters.com/1"]
+
+
+def test_format_briefing_marks_rendered_articles_as_briefed(mock_storage):
+    gen = BriefingGenerator(storage=mock_storage, use_llm=False)
+
+    gen.format_briefing("evening")
+
+    args, _ = mock_storage.mark_articles_briefed.call_args
+    assert args[0] == ["https://hk.com/1", "https://reuters.com/1"]
+    assert args[1].endswith(":evening")
+
+
+def test_format_briefing_can_skip_marking_articles(mock_storage):
+    gen = BriefingGenerator(storage=mock_storage, use_llm=False)
+
+    gen.format_briefing("morning", mark_as_briefed=False)
+
+    mock_storage.mark_articles_briefed.assert_not_called()
+
+
+def test_briefing_since_splits_morning_and_evening_windows():
+    now = datetime(2026, 5, 23, 19, 10, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    assert _briefing_since_utc("morning", now) == "2026-05-22 10:00:00"
+    assert _briefing_since_utc("evening", now) == "2026-05-22 22:00:00"
+
+
 # LLM 모드 테스트 — OpenAI 호출을 mock해 네트워크 없이 동작 확인
 
 def _fake_openai_response(text: str) -> MagicMock:
@@ -79,12 +116,12 @@ def _fake_openai_response(text: str) -> MagicMock:
 
 
 @patch("openai.OpenAI")
-def test_llm_mode_inserts_summary_and_sources(MockOpenAI, mock_storage):
+def test_llm_mode_inserts_summary_and_sources(mock_openai_cls, mock_storage):
     client = MagicMock()
     client.chat.completions.create.return_value = _fake_openai_response(
         "2분기 성장률 상승 전망이 우세하다. [1]"
     )
-    MockOpenAI.return_value = client
+    mock_openai_cls.return_value = client
 
     gen = BriefingGenerator(storage=mock_storage, use_llm=True)
     text = gen.format_briefing("morning")
@@ -97,10 +134,10 @@ def test_llm_mode_inserts_summary_and_sources(MockOpenAI, mock_storage):
 
 
 @patch("openai.OpenAI")
-def test_llm_mode_falls_back_on_error(MockOpenAI, mock_storage):
+def test_llm_mode_falls_back_on_error(mock_openai_cls, mock_storage):
     client = MagicMock()
     client.chat.completions.create.side_effect = RuntimeError("API down")
-    MockOpenAI.return_value = client
+    mock_openai_cls.return_value = client
 
     gen = BriefingGenerator(storage=mock_storage, use_llm=True)
     text = gen.format_briefing("morning")
@@ -111,10 +148,10 @@ def test_llm_mode_falls_back_on_error(MockOpenAI, mock_storage):
 
 
 @patch("openai.OpenAI")
-def test_llm_mode_uses_configured_model(MockOpenAI, mock_storage):
+def test_llm_mode_uses_configured_model(mock_openai_cls, mock_storage):
     client = MagicMock()
     client.chat.completions.create.return_value = _fake_openai_response("요약")
-    MockOpenAI.return_value = client
+    mock_openai_cls.return_value = client
 
     gen = BriefingGenerator(storage=mock_storage, use_llm=True, model="gpt-4o-mini")
     gen.format_briefing("morning")
@@ -126,11 +163,11 @@ def test_llm_mode_uses_configured_model(MockOpenAI, mock_storage):
 
 
 @patch("openai.OpenAI")
-def test_llm_prompt_includes_published_at(MockOpenAI, mock_storage):
+def test_llm_prompt_includes_published_at(mock_openai_cls, mock_storage):
     """LLM이 시점을 인지할 수 있도록 user prompt에 발행일이 들어가야 한다."""
     client = MagicMock()
     client.chat.completions.create.return_value = _fake_openai_response("요약")
-    MockOpenAI.return_value = client
+    mock_openai_cls.return_value = client
 
     gen = BriefingGenerator(storage=mock_storage, use_llm=True)
     gen.format_briefing("morning")

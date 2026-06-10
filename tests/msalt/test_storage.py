@@ -21,6 +21,7 @@ def test_initialize_creates_news_articles_table(db):
     tables = [row[0] for row in cursor.fetchall()]
     conn.close()
     assert "news_articles" in tables
+    assert "news_briefed_articles" in tables
 
 
 def test_insert_and_get_article(db):
@@ -97,6 +98,18 @@ def test_get_articles_since_require_published_at_excludes_null(db):
     titles = [a["title"] for a in articles]
     assert "발행일 있음" in titles
     assert "발행일 미상" not in titles
+
+
+def test_mark_and_get_briefed_article_urls(db):
+    urls = ["https://a.com/1", "https://b.com/1", "https://a.com/1"]
+
+    inserted = db.mark_articles_briefed(urls, "2026-05-22:morning")
+
+    assert inserted == 2
+    assert db.get_briefed_article_urls(["https://a.com/1", "https://c.com/1"]) == {
+        "https://a.com/1"
+    }
+    assert db.mark_articles_briefed(["https://a.com/1"], "2026-05-22:evening") == 0
 
 
 def test_storage_initialize_migrates_existing_db_without_published_at(tmp_path):

@@ -24,6 +24,12 @@ class Storage:
                 published_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS news_briefed_articles (
+                article_url TEXT PRIMARY KEY,
+                briefing_label TEXT NOT NULL,
+                briefed_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS tracked_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
@@ -50,6 +56,8 @@ class Storage:
 
             CREATE INDEX IF NOT EXISTS idx_records_for ON records(recorded_for);
             CREATE INDEX IF NOT EXISTS idx_records_item ON records(item_id, recorded_for DESC);
+            CREATE INDEX IF NOT EXISTS idx_news_briefed_at
+                ON news_briefed_articles(briefed_at DESC);
         """)
         cols = {row[1] for row in conn.execute("PRAGMA table_info(tracked_items)")}
         if "last_missed_asked_date" not in cols:
@@ -129,6 +137,37 @@ class Storage:
                 )
             cursor = conn.execute(sql, (since_date,))
             return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def get_briefed_article_urls(self, urls: list[str]) -> set[str]:
+        if not urls:
+            return set()
+        conn = self._connect()
+        try:
+            placeholders = ",".join("?" for _ in urls)
+            rows = conn.execute(
+                f"SELECT article_url FROM news_briefed_articles "
+                f"WHERE article_url IN ({placeholders})",
+                urls,
+            ).fetchall()
+            return {row["article_url"] for row in rows}
+        finally:
+            conn.close()
+
+    def mark_articles_briefed(self, urls: list[str], briefing_label: str) -> int:
+        if not urls:
+            return 0
+        conn = self._connect()
+        try:
+            before = conn.total_changes
+            conn.executemany(
+                "INSERT OR IGNORE INTO news_briefed_articles "
+                "(article_url, briefing_label) VALUES (?, ?)",
+                [(url, briefing_label) for url in dict.fromkeys(urls)],
+            )
+            conn.commit()
+            return conn.total_changes - before
         finally:
             conn.close()
 
