@@ -10,16 +10,19 @@ from pathlib import Path
 from typing import Callable
 
 import httpx
+from loguru import logger
 
 from msalt.storage import Storage
 from msalt.tracking.dispatcher import Dispatcher, ReplyKeyboard
 from msalt.tracking.items import (
-    TrackedItemManager, ItemAlreadyExists, ItemNotFound,
+    ItemAlreadyExists,
+    ItemNotFound,
+    TrackedItemManager,
 )
 from msalt.tracking.records import RecordManager
 
-
 DEFAULT_DB = str(Path.home() / ".nanobot" / "workspace" / "msalt.db")
+DEFAULT_WORKSPACE = Path.home() / ".nanobot" / "workspace"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -75,7 +78,19 @@ def _make_reply_markup(reply_keyboard: ReplyKeyboard | None) -> dict[str, object
     }
 
 
-def _make_telegram_sender() -> Callable[[str, ReplyKeyboard | None], None]:
+def _record_outbound_in_session(workspace: Path, chat_id: str, text: str) -> None:
+    """Direct dispatcher sends should still become assistant turns in nanobot."""
+    from nanobot.session.manager import SessionManager
+
+    manager = SessionManager(workspace)
+    session = manager.get_or_create(f"telegram:{chat_id}")
+    session.add_message("assistant", text)
+    manager.save(session)
+
+
+def _make_telegram_sender(
+    workspace: Path = DEFAULT_WORKSPACE,
+) -> Callable[[str, ReplyKeyboard | None], None]:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_USER_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -90,6 +105,10 @@ def _make_telegram_sender() -> Callable[[str, ReplyKeyboard | None], None]:
             },
             timeout=10,
         )
+        try:
+            _record_outbound_in_session(workspace, chat_id, text)
+        except Exception as exc:
+            logger.warning("Failed to record dispatcher message in session: {}", exc)
 
     return send
 
@@ -166,7 +185,7 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
         return 0
 
     if args.cmd == "dispatch":
-        sender = _make_telegram_sender()
+        sender = _make_telegram_sender(workspace=Path(db_path).expanduser().parent)
         d = Dispatcher(items, records, telegram_send=sender)
         if args.now:
             now = datetime.fromisoformat(args.now)

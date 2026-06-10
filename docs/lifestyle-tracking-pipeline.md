@@ -20,6 +20,7 @@ flowchart TD
     DispatchCmd --> Dispatcher["Dispatcher"]
     Dispatcher --> Storage
     Dispatcher --> Telegram["Telegram sendMessage"]
+    DispatchCmd --> Session["nanobot session history"]
 
     Agent -. 자연어 해석 .-> Parser["NaturalLanguageParser<br/>gpt-5-mini"]
     Parser -. record/add intent .-> Skill
@@ -41,7 +42,7 @@ flowchart TD
 | `msalt/tracking/records.py` | 기록 upsert, 조회, schema별 통계와 기록 후 조언 |
 | `msalt/tracking/parser.py` | LLM 기반 자연어 기록/항목 추가 의도 파싱 |
 | `msalt/tracking/dispatcher.py` | 정해진 시각 알림, pending/retry 처리, batch 메시지 생성 |
-| `msalt/tracking/cli.py` | `dispatch`, `add`, `list`, `delete`, `record`, `summary` CLI |
+| `msalt/tracking/cli.py` | `dispatch`, `add`, `list`, `delete`, `record`, `summary` CLI. dispatch 알림을 nanobot session에도 저장 |
 | `msalt/tracking/alcohol.py` | 술 종류별 표준 용량/도수와 순알코올 g 계산 기준 |
 | `msalt/storage.py` | `tracked_items`, `records` 테이블과 관련 DB 메서드 |
 | `msalt/skills/tracking/SKILL.md` | agent가 생활 기록 요청을 처리하는 규칙 |
@@ -292,6 +293,7 @@ alcohol_g = amount * serving_ml * (abv_percent / 100) * 0.789
 - `pending_since`를 현재 UTC 시각으로 설정
 - `pending_recorded_for`를 알림 대상 날짜로 설정
 - `last_asked_at`을 현재 UTC 시각으로 설정
+- 같은 알림 텍스트를 `telegram:<chat_id>` nanobot session에 assistant 메시지로 저장
 
 ### pending 해제
 
@@ -340,6 +342,20 @@ reply keyboard 버튼에도 항목명과 대상 날짜가 들어간다.
 ```
 
 agent는 버튼 텍스트의 날짜를 `tracking record --date`에 그대로 사용한다. 현재 날짜와 다르더라도 버튼에 있는 날짜가 우선이다.
+
+### session history 기록
+
+tracking dispatcher는 nanobot agent 경로를 거치지 않고 Telegram API로 직접 알림을 보낸다. 그래서 알림 텍스트를 별도로 session history에 저장하지 않으면 사용자가 `"7시간"`처럼 짧게 답했을 때 LLM이 직전 질문을 모를 수 있다.
+
+`msalt.tracking.cli._make_telegram_sender()`는 Telegram 전송 후 같은 텍스트를 nanobot의 `SessionManager`에 assistant 메시지로 저장한다.
+
+```text
+session key: telegram:<TELEGRAM_USER_ID>
+role: assistant
+content: <dispatcher가 보낸 알림 텍스트>
+```
+
+이렇게 하면 사용자가 Telegram reply 기능을 쓰지 않고 바로 답해도, 일반 nanobot 대화 history 안에서 직전 능동 알림을 볼 수 있다.
 
 ## systemd timer
 

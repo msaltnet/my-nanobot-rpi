@@ -1,4 +1,5 @@
 import pytest
+from nanobot.session.manager import SessionManager
 
 from msalt.storage import Storage
 from msalt.tracking.cli import _make_reply_markup, _make_telegram_sender, run_command
@@ -138,12 +139,43 @@ def test_dispatch_command_invokes_dispatcher(db_path, capsys, monkeypatch):
     sent: list[str] = []
     monkeypatch.setattr(
         "msalt.tracking.cli._make_telegram_sender",
-        lambda: sent.append,
+        lambda workspace=None: sent.append,
     )
     rc = run_command(["dispatch", "--now", "2026-04-14T08:05:00+09:00"],
                      db_path=db_path)
     assert rc == 0
     assert any("수면" in m for m in sent)
+
+
+def test_dispatch_command_records_alert_in_matching_workspace(
+    tmp_path, capsys, monkeypatch
+):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    db = workspace / "msalt.db"
+    s = Storage(str(db))
+    s.initialize()
+    TrackedItemManager(s).add("수면", "duration", None, "08:00")
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "123")
+
+    def fake_post(url, json, timeout):
+        return object()
+
+    monkeypatch.setattr("msalt.tracking.cli.httpx.post", fake_post)
+
+    rc = run_command(
+        ["dispatch", "--now", "2026-04-14T08:05:00+09:00"],
+        db_path=str(db),
+    )
+
+    assert rc == 0
+    session = SessionManager(workspace).get_or_create("telegram:123")
+    history = session.get_history()
+    assert history[-1]["role"] == "assistant"
+    assert "수면" in history[-1]["content"]
+    assert "2026-04-14" in history[-1]["content"]
 
 
 def test_make_reply_markup_builds_keyboard():
@@ -180,6 +212,27 @@ def test_telegram_sender_posts_reply_markup(monkeypatch):
     assert posted["timeout"] == 10
 
 
+def test_telegram_sender_records_active_reminder_in_nanobot_session(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_USER_ID", "123")
+
+    def fake_post(url, json, timeout):
+        return object()
+
+    monkeypatch.setattr("msalt.tracking.cli.httpx.post", fake_post)
+
+    sender = _make_telegram_sender(workspace=tmp_path)
+    sender("⏰ '수면' 기록할 시간이야. 대상 날짜: 2026-05-22.")
+
+    session = SessionManager(tmp_path).get_or_create("telegram:123")
+    history = session.get_history()
+    assert history[-1]["role"] == "assistant"
+    assert "2026-05-22" in history[-1]["content"]
+    assert "수면" in history[-1]["content"]
+
+
 def test_first_run_seeds_defaults(tmp_path, capsys):
     db = tmp_path / "fresh.db"
     rc = run_command(["list"], db_path=str(db))
@@ -195,7 +248,7 @@ def test_seed_only_on_empty_db(tmp_path, capsys):
     run_command(["list"], db_path=str(db))   # seeds
     run_command(["delete", "수면"], db_path=str(db))
     capsys.readouterr()
-    rc = run_command(["list"], db_path=str(db))
+    run_command(["list"], db_path=str(db))
     out = capsys.readouterr().out
     assert "수면" not in out
     assert "음주" in out  # 다른 시드는 그대로
