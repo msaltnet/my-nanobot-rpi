@@ -36,6 +36,8 @@ _RECORD_SYSTEM = """\
  "confidence": 0~1}
 
 규칙:
+- 입력에 명시된 YYYY-MM-DD 날짜가 있으면 그 날짜를 recorded_for에 그대로 사용한다.
+  예: "수면 2026-05-01 7시간"은 now가 2026-05-02여도 recorded_for="2026-05-01".
 - "어제"/"지난주 화요일" 등 상대 시점은 now 기준으로 절대 날짜 변환.
 - duration schema → value_num은 분 단위 정수.
 - quantity schema → value_num은 숫자, 단위는 item의 unit 사용.

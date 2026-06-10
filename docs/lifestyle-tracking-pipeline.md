@@ -68,6 +68,7 @@ SQLite DB 기본 경로는 `~/.nanobot/workspace/msalt.db`다.
 | `created_at` | SQLite UTC 생성 시각 |
 | `last_missed_asked_date` | 과거 누락 질문용 legacy 컬럼 |
 | `pending_since` | 첫 알림 발송 후 아직 답이 없는 상태의 UTC 시각 |
+| `pending_recorded_for` | pending 알림이 요구한 대상 기록 날짜, `YYYY-MM-DD` |
 | `last_asked_at` | 마지막 알림 발송 UTC 시각. 같은 retry 슬롯 중복 발송 방지 |
 
 ### `records`
@@ -280,22 +281,38 @@ alcohol_g = amount * serving_ml * (abv_percent / 100) * 0.789
 
 각 항목의 `schedule_time`이 `(now - 30분, now]` 안에 들어오면 첫 알림 후보가 된다. 단, 최근 24시간 안에 해당 항목 기록이 있으면 알림을 보내지 않는다.
 
-첫 알림을 보내면:
+첫 알림을 보내면 메시지와 reply keyboard에 대상 날짜를 함께 넣는다.
+
+```text
+⏰ '수면' 기록할 시간이야. 대상 날짜: 2026-05-22. 얼마나 했는지 알려줘.
+```
+
+첫 알림을 보낸 뒤에는:
 
 - `pending_since`를 현재 UTC 시각으로 설정
+- `pending_recorded_for`를 알림 대상 날짜로 설정
 - `last_asked_at`을 현재 UTC 시각으로 설정
 
 ### pending 해제
 
-다음 tick에서 `pending_since` 이후로 기록이 들어온 것이 확인되면 pending을 지운다.
+다음 tick에서 `pending_recorded_for` 날짜의 기록이 들어온 것이 확인되면 pending을 지운다.
 
 ```text
-storage.has_record_since(item_id, pending_since) == True
+storage.record_exists(item_id, pending_recorded_for) == True
 ```
+
+예를 들어 2026-05-22 수면 기록을 물어봤는데 사용자가 실수로 2026-05-23 수면만 기록하면 pending은 유지된다. 이렇게 해야 다음 retry에서 어떤 날짜 기록이 빠졌는지 계속 명확하게 물을 수 있다.
+
+기존 DB처럼 `pending_recorded_for`가 비어 있는 오래된 pending은 호환을 위해 `pending_since` 이후 기록 여부로 fallback한다.
 
 ### retry
 
 답이 없으면 다음날 또는 이후 `09:00`, `14:00`, `20:00` KST retry 슬롯에서 다시 묻는다. `last_asked_at`으로 같은 retry 슬롯 안에서 두 번 보내는 것을 막는다.
+retry 문구도 기존 pending의 `pending_recorded_for`를 사용한다.
+
+```text
+⏰ '수면' 2026-05-22 기록이 아직 비어 있어. 얼마나 했는지 알려줘.
+```
 
 ### stale pending
 
@@ -307,12 +324,22 @@ storage.has_record_since(item_id, pending_since) == True
 
 ```text
 📝 기록할 항목 3개:
-1. 수면 — 몇 시간/얼마나?
-2. 음주 — 무슨 술, 얼마나?
-3. 영어공부 — 했어?
+1. 수면 (2026-05-22 기록) — 몇 시간/얼마나?
+2. 음주 (2026-05-22 기록) — 무슨 술, 얼마나?
+3. 영어공부 (2026-05-22 기록) — 했어?
 ```
 
 단일 항목이면 기존처럼 자연스러운 한 문장으로 보낸다.
+
+reply keyboard 버튼에도 항목명과 대상 날짜가 들어간다.
+
+```text
+수면 2026-05-22 7시간
+음주 2026-05-22 안 마심
+영어공부 2026-05-22 했어
+```
+
+agent는 버튼 텍스트의 날짜를 `tracking record --date`에 그대로 사용한다. 현재 날짜와 다르더라도 버튼에 있는 날짜가 우선이다.
 
 ## systemd timer
 
@@ -358,6 +385,7 @@ sudo systemctl start msalt-tracking-dispatch.service
 - `python -m msalt.tracking ...`는 agent 경로에서 금지한다.
 - 항목 추가는 schema/time 추론 후 사용자 확인을 받고 실행한다.
 - batch 알림에 한 번에 답하면 항목별로 record CLI를 각각 호출한다.
+- 알림이나 버튼에 `YYYY-MM-DD`가 있으면 해당 날짜를 각 항목의 `--date`로 사용한다.
 - boolean 부정 답은 `--no-bool`로 저장한다.
 
 ## 운영 명령
@@ -448,7 +476,7 @@ journalctl -u msalt-tracking-dispatch.service -n 50
 - `.env`의 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`가 systemd service에 로드되는지
 - 항목의 `schedule_time`이 현재 30분 window에 들어오는지
 - 최근 24시간 기록이 있어서 첫 알림이 skip된 것은 아닌지
-- `pending_since`, `last_asked_at`이 retry를 막고 있는 것은 아닌지
+- `pending_since`, `pending_recorded_for`, `last_asked_at`이 retry를 막고 있는 것은 아닌지
 
 ### 같은 retry가 반복됨
 
@@ -458,6 +486,12 @@ journalctl -u msalt-tracking-dispatch.service -n 50
 
 ```sql
 SELECT name, pending_since, last_asked_at FROM tracked_items;
+```
+
+대상 날짜까지 같이 확인하려면:
+
+```sql
+SELECT name, pending_since, pending_recorded_for, last_asked_at FROM tracked_items;
 ```
 
 ### 항목 추가가 잘못됨

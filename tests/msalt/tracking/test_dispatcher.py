@@ -1,13 +1,13 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
+
 import pytest
 
 from msalt.storage import Storage
+from msalt.tracking.dispatcher import Dispatcher
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.records import RecordManager
-from msalt.tracking.dispatcher import Dispatcher
-
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -37,7 +37,7 @@ def test_no_items_no_messages(setup):
 
 
 def test_first_alert_when_schedule_slot_in_window(setup):
-    """schedule_time이 [now-30, now] 윈도우에 들어오면 첫 알림 발송 + pending_since 세팅."""
+    """schedule_time이 [now-30, now] 윈도우에 들어오면 대상 날짜를 명시하고 pending을 세팅한다."""
     s, items, records = setup
     items.add("수면", "duration", None, "22:00")
     send = MagicMock()
@@ -45,9 +45,13 @@ def test_first_alert_when_schedule_slot_in_window(setup):
     msgs = d.run(now=_kst(2026, 5, 1, 22, 5))
     assert len(msgs) == 1
     assert msgs[0].item_name == "수면"
+    assert msgs[0].recorded_for == "2026-05-01"
+    assert "2026-05-01" in msgs[0].text
+    assert "2026-05-01" in send.call_args.args[0]
     assert send.call_count == 1
     item = s.get_tracked_item_by_name("수면")
     assert item["pending_since"] is not None
+    assert item["pending_recorded_for"] == "2026-05-01"
     assert item["last_asked_at"] is not None
 
 
@@ -76,6 +80,23 @@ def test_record_arrived_clears_pending(setup):
     assert msgs == []
     item = s.get_tracked_item_by_name("수면")
     assert item["pending_since"] is None
+    assert item["pending_recorded_for"] is None
+
+
+def test_record_for_other_date_does_not_clear_pending(setup):
+    """대상 날짜가 아닌 기록은 pending을 지우지 않아야 재질문 대상이 흐려지지 않는다."""
+    s, items, records = setup
+    items.add("수면", "duration", None, "22:00")
+    send = MagicMock()
+    d = Dispatcher(items, records, telegram_send=send)
+    d.run(now=_kst(2026, 5, 1, 22, 5))
+    records.upsert("수면", "2026-05-02", value_num=480, raw_input="다른 날짜")
+    msgs = d.run(now=_kst(2026, 5, 2, 9, 5))
+    assert len(msgs) == 1
+    assert msgs[0].kind == "retry"
+    assert msgs[0].recorded_for == "2026-05-01"
+    item = s.get_tracked_item_by_name("수면")
+    assert item["pending_recorded_for"] == "2026-05-01"
 
 
 # --- retry chain ---
@@ -91,6 +112,9 @@ def test_retry_at_09_when_pending(setup):
     msgs = d.run(now=_kst(2026, 5, 2, 9, 5))
     assert len(msgs) == 1
     assert msgs[0].item_name == "수면"
+    assert msgs[0].recorded_for == "2026-05-01"
+    assert "2026-05-01" in msgs[0].text
+    assert "2026-05-01" in send.call_args.args[0]
     assert send.call_count == 2
 
 
@@ -143,6 +167,7 @@ def test_next_schedule_slot_clears_stale_pending(setup):
     item = s.get_tracked_item_by_name("수면")
     # pending_since는 day2 알림 시각
     assert item["pending_since"] is not None
+    assert item["pending_recorded_for"] == "2026-05-02"
     # day2 첫 알림이 day1 알림(13:00 UTC) 이후
     assert item["pending_since"] > "2026-05-01 13:00:00"
 
@@ -163,6 +188,7 @@ def test_multiple_items_batched_into_one_message(setup):
     sent_text = send.call_args.args[0]
     assert "수면" in sent_text
     assert "음주" in sent_text
+    assert "2026-05-01" in sent_text
 
 
 def test_single_item_uses_solo_format(setup):
@@ -185,13 +211,13 @@ def test_single_item_sends_schema_keyboard(setup):
     d = Dispatcher(items, records, telegram_send=send)
     msgs = d.run(now=_kst(2026, 5, 1, 22, 5))
     keyboard = send.call_args.args[1]
-    assert ["수면 6시간", "수면 7시간"] in keyboard
-    assert ["수면 8시간", "수면 9시간"] in keyboard
+    assert ["수면 2026-05-01 6시간", "수면 2026-05-01 7시간"] in keyboard
+    assert ["수면 2026-05-01 8시간", "수면 2026-05-01 9시간"] in keyboard
     assert msgs[0].reply_keyboard == keyboard
 
 
 def test_batch_keyboard_includes_item_names(setup):
-    """묶음 알림 버튼은 누른 텍스트만으로도 항목 매칭되도록 항목명을 포함한다."""
+    """묶음 알림 버튼은 누른 텍스트만으로도 항목과 대상 날짜를 매칭할 수 있어야 한다."""
     _, items, records = setup
     items.add("수면", "duration", None, "22:00")
     items.add("음주", "quantity", "g", "22:00")
@@ -201,11 +227,11 @@ def test_batch_keyboard_includes_item_names(setup):
     d.run(now=_kst(2026, 5, 1, 22, 5))
     keyboard = send.call_args.args[1]
     flat = [button for row in keyboard for button in row]
-    assert "수면 7시간" in flat
-    assert "음주 안 마심" in flat
-    assert "음주 맥주 1캔" in flat
-    assert "영어공부 했어" in flat
-    assert "영어공부 안 했어" in flat
+    assert "수면 2026-05-01 7시간" in flat
+    assert "음주 2026-05-01 안 마심" in flat
+    assert "음주 2026-05-01 맥주 1캔" in flat
+    assert "영어공부 2026-05-01 했어" in flat
+    assert "영어공부 2026-05-01 안 했어" in flat
 
 
 def test_batch_includes_first_alert_and_retry_in_same_tick(setup):
@@ -216,12 +242,12 @@ def test_batch_includes_first_alert_and_retry_in_same_tick(setup):
     send = MagicMock()
     d = Dispatcher(items, records, telegram_send=send)
     d.run(now=_kst(2026, 5, 1, 22, 5))   # 수면 첫 알림 → pending 세팅
-    msgs = d.run(now=_kst(2026, 5, 2, 9, 5))
+    d.run(now=_kst(2026, 5, 2, 9, 5))
     # 아침메모는 첫 알림, 수면은 retry. 한 메시지에 둘 다 들어가야 함
     assert send.call_count == 2   # day1 첫 알림 + day2 batch
     sent_text = send.call_args.args[0]
-    assert "아침메모" in sent_text
-    assert "수면" in sent_text
+    assert "아침메모 (2026-05-02 기록)" in sent_text
+    assert "수면 (2026-05-01 기록)" in sent_text
 
 
 # --- 24h 내 record 있으면 첫 알림 skip ---

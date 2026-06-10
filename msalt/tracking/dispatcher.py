@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.records import RecordManager
 
-
 KST = ZoneInfo("Asia/Seoul")
 WINDOW_MINUTES = 30
 RECENT_HOURS = 24
@@ -24,8 +23,16 @@ ReplyKeyboard = list[list[str]]
 class DispatchMessage:
     kind: Literal["scheduled", "retry"]
     item_name: str
+    recorded_for: str
     text: str   # 항목 단독 톤 텍스트 (batch 합치기 전 단계)
     reply_keyboard: ReplyKeyboard | None = None
+
+
+@dataclass
+class DispatchTarget:
+    kind: Literal["scheduled", "retry"]
+    item: dict
+    recorded_for: str
 
 
 def _parse_hhmm(s: str) -> tuple[int, int]:
@@ -49,41 +56,52 @@ def _question_hint(item: dict) -> str:
     return "한 줄 메모"
 
 
-def _solo_text(item: dict) -> str:
+def _solo_text(target: DispatchTarget) -> str:
+    item = target.item
     name = item["name"]
     schema = item["schema"]
     unit = item.get("unit") or ""
+    prefix = (
+        f"⏰ '{name}' {target.recorded_for} 기록이 아직 비어 있어."
+        if target.kind == "retry"
+        else f"⏰ '{name}' 기록할 시간이야. 대상 날짜: {target.recorded_for}."
+    )
     if schema == "duration":
-        return f"⏰ '{name}' 기록할 시간이야. 얼마나 했는지 알려줘."
+        return f"{prefix} 얼마나 했는지 알려줘."
     if schema == "quantity":
         if name == "음주":
-            return f"⏰ '{name}' 기록할 시간이야. 무슨 술을 얼마나 마셨는지 알려줘."
-        return f"⏰ '{name}' 기록할 시간이야. 몇 {unit}인지 알려줘."
+            return f"{prefix} 무슨 술을 얼마나 마셨는지 알려줘."
+        return f"{prefix} 몇 {unit}인지 알려줘."
     if schema == "boolean":
-        return f"⏰ '{name}' 했어?"
-    return f"⏰ '{name}' 한 줄 메모 남겨줘."
+        return f"{prefix} 했어?"
+    return f"{prefix} 한 줄 메모 남겨줘."
 
 
-def _format_batch(items: list[dict]) -> str:
+def _format_batch(targets: list[DispatchTarget]) -> str:
     """단일 항목이면 솔로 톤, 복수면 번호 리스트."""
-    if len(items) == 1:
-        return _solo_text(items[0])
-    lines = [f"📝 기록할 항목 {len(items)}개:"]
-    for i, it in enumerate(items, 1):
-        lines.append(f"{i}. {it['name']} — {_question_hint(it)}")
+    if len(targets) == 1:
+        return _solo_text(targets[0])
+    lines = [f"📝 기록할 항목 {len(targets)}개:"]
+    for i, target in enumerate(targets, 1):
+        it = target.item
+        lines.append(
+            f"{i}. {it['name']} ({target.recorded_for} 기록) — {_question_hint(it)}"
+        )
     return "\n".join(lines)
 
 
-def _prefixed(item: dict, answer: str) -> str:
-    return f"{item['name']} {answer}"
+def _prefixed(item: dict, recorded_for: str, answer: str) -> str:
+    return f"{item['name']} {recorded_for} {answer}"
 
 
-def _rows(item: dict, answers: list[str], columns: int = 2) -> ReplyKeyboard:
-    buttons = [_prefixed(item, answer) for answer in answers]
+def _rows(
+    item: dict, recorded_for: str, answers: list[str], columns: int = 2
+) -> ReplyKeyboard:
+    buttons = [_prefixed(item, recorded_for, answer) for answer in answers]
     return [buttons[i:i + columns] for i in range(0, len(buttons), columns)]
 
 
-def _reply_keyboard_for_item(item: dict) -> ReplyKeyboard:
+def _reply_keyboard_for_item(item: dict, recorded_for: str) -> ReplyKeyboard:
     """항목 schema에 맞춰, 누르면 그대로 기록 의도가 되는 버튼을 만든다."""
     name = item["name"]
     schema = item["schema"]
@@ -94,28 +112,39 @@ def _reply_keyboard_for_item(item: dict) -> ReplyKeyboard:
             if name == "수면"
             else ["30분", "1시간", "2시간", "3시간"]
         )
-        return _rows(item, answers)
+        return _rows(item, recorded_for, answers)
 
     if schema == "quantity":
         if name == "음주":
             return [
-                [_prefixed(item, "안 마심")],
-                [_prefixed(item, "맥주 1캔"), _prefixed(item, "소주 1병")],
-                [_prefixed(item, "와인 1잔"), _prefixed(item, "하이볼 1잔")],
+                [_prefixed(item, recorded_for, "안 마심")],
+                [
+                    _prefixed(item, recorded_for, "맥주 1캔"),
+                    _prefixed(item, recorded_for, "소주 1병"),
+                ],
+                [
+                    _prefixed(item, recorded_for, "와인 1잔"),
+                    _prefixed(item, recorded_for, "하이볼 1잔"),
+                ],
             ]
         unit = item.get("unit") or ""
-        return _rows(item, [f"0{unit}", f"1{unit}", f"2{unit}", f"3{unit}"])
+        return _rows(
+            item, recorded_for, [f"0{unit}", f"1{unit}", f"2{unit}", f"3{unit}"]
+        )
 
     if schema == "boolean":
-        return [[_prefixed(item, "했어"), _prefixed(item, "안 했어")]]
+        return [[
+            _prefixed(item, recorded_for, "했어"),
+            _prefixed(item, recorded_for, "안 했어"),
+        ]]
 
     return []
 
 
-def _reply_keyboard_for_items(items: list[dict]) -> ReplyKeyboard | None:
+def _reply_keyboard_for_items(targets: list[DispatchTarget]) -> ReplyKeyboard | None:
     rows: ReplyKeyboard = []
-    for item in items:
-        rows.extend(_reply_keyboard_for_item(item))
+    for target in targets:
+        rows.extend(_reply_keyboard_for_item(target.item, target.recorded_for))
     return rows or None
 
 
@@ -157,6 +186,25 @@ def _retry_slot_in_window(now_kst: datetime, window_start_kst: datetime) -> date
     return None
 
 
+def _fallback_recorded_for_from_pending(pending_since_utc: str) -> str:
+    pending_dt_utc = datetime.strptime(
+        pending_since_utc, UTC_TS_FORMAT
+    ).replace(tzinfo=timezone.utc)
+    return pending_dt_utc.astimezone(KST).date().isoformat()
+
+
+def _message_for(target: DispatchTarget) -> DispatchMessage:
+    return DispatchMessage(
+        kind=target.kind,
+        item_name=target.item["name"],
+        recorded_for=target.recorded_for,
+        text=_solo_text(target),
+        reply_keyboard=_reply_keyboard_for_item(
+            target.item, target.recorded_for
+        ) or None,
+    )
+
+
 class Dispatcher:
     def __init__(self, items: TrackedItemManager, records: RecordManager,
                  telegram_send: Callable[..., None]):
@@ -187,7 +235,7 @@ class Dispatcher:
         ).strftime(UTC_TS_FORMAT)
 
         storage = self.records.storage
-        batch_items: list[dict] = []
+        batch_targets: list[DispatchTarget] = []
         batch_messages: list[DispatchMessage] = []
         retry_slot_kst = _retry_slot_in_window(now_kst, window_start_kst)
         retry_slot_utc_str = (
@@ -198,9 +246,16 @@ class Dispatcher:
         for it in all_items:
             # 1. record가 pending_since 이후로 들어왔으면 pending 클리어
             if it.get("pending_since"):
-                if storage.has_record_since(it["id"], it["pending_since"]):
+                pending_recorded_for = it.get("pending_recorded_for")
+                has_pending_record = (
+                    storage.record_exists(it["id"], pending_recorded_for)
+                    if pending_recorded_for
+                    else storage.has_record_since(it["id"], it["pending_since"])
+                )
+                if has_pending_record:
                     storage.clear_pending(it["id"])
                     it["pending_since"] = None
+                    it["pending_recorded_for"] = None
 
             # 2. 다음 schedule_slot 도래 시 stale pending 폐기
             if it.get("pending_since"):
@@ -208,40 +263,47 @@ class Dispatcher:
                 if now_kst >= next_slot_kst:
                     storage.clear_pending(it["id"])
                     it["pending_since"] = None
+                    it["pending_recorded_for"] = None
 
             # 3. 첫 알림 — schedule_time이 오늘의 (window_start, now] 윈도우 안
             h, m = _parse_hhmm(it["schedule_time"])
             slot_today_kst = now_kst.replace(hour=h, minute=m, second=0, microsecond=0)
             if window_start_kst < slot_today_kst <= now_kst:
                 if not storage.has_record_since(it["id"], recent_since_utc):
-                    batch_items.append(it)
-                    batch_messages.append(DispatchMessage(
-                        kind="scheduled", item_name=it["name"],
-                        text=_solo_text(it),
-                        reply_keyboard=_reply_keyboard_for_item(it) or None,
-                    ))
+                    target = DispatchTarget(
+                        kind="scheduled",
+                        item=it,
+                        recorded_for=slot_today_kst.date().isoformat(),
+                    )
+                    batch_targets.append(target)
+                    batch_messages.append(_message_for(target))
                 continue
 
             # 4. retry — pending이고 글로벌 retry 슬롯이 윈도우 안
             if it.get("pending_since") and retry_slot_kst is not None:
                 last_asked = it.get("last_asked_at")
                 if last_asked is None or last_asked < retry_slot_utc_str:
-                    batch_items.append(it)
-                    batch_messages.append(DispatchMessage(
-                        kind="retry", item_name=it["name"],
-                        text=_solo_text(it),
-                        reply_keyboard=_reply_keyboard_for_item(it) or None,
-                    ))
+                    target = DispatchTarget(
+                        kind="retry",
+                        item=it,
+                        recorded_for=it.get("pending_recorded_for")
+                        or _fallback_recorded_for_from_pending(it["pending_since"]),
+                    )
+                    batch_targets.append(target)
+                    batch_messages.append(_message_for(target))
 
         # 5. 한 메시지로 묶어 발송
-        if batch_items:
+        if batch_targets:
             self._send_batch(
-                _format_batch(batch_items),
-                _reply_keyboard_for_items(batch_items),
+                _format_batch(batch_targets),
+                _reply_keyboard_for_items(batch_targets),
             )
-            for it in batch_items:
+            for target in batch_targets:
+                it = target.item
                 if not it.get("pending_since"):
-                    storage.set_pending_since(it["id"], now_utc_str)
+                    storage.set_pending_since(
+                        it["id"], now_utc_str, target.recorded_for
+                    )
                 storage.set_last_asked_at(it["id"], now_utc_str)
 
         return batch_messages

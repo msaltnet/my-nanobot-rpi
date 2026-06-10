@@ -1,9 +1,12 @@
 import json
 from unittest.mock import MagicMock
+
 import pytest
 
 from msalt.tracking.parser import (
-    NaturalLanguageParser, ParsedRecord, ParsedItemIntent,
+    NaturalLanguageParser,
+    ParsedItemIntent,
+    ParsedRecord,
 )
 
 
@@ -117,6 +120,27 @@ def test_parse_record_sends_alcohol_profiles_to_llm():
     assert beer["unit"] == "캔"
     assert beer["serving_ml"] == 500
     assert beer["abv_percent"] == 5
+
+
+def test_parse_record_system_prompt_prioritizes_explicit_date():
+    client = _mock_client_with(json.dumps({
+        "item_name": "수면",
+        "recorded_for": "2026-05-01",
+        "value_num": 420,
+        "value_text": None,
+        "value_bool": None,
+        "value_json": None,
+        "confidence": 0.9,
+    }))
+    parser = NaturalLanguageParser(client=client, model="gpt-5-mini")
+    parser.parse_record(
+        "수면 2026-05-01 7시간",
+        known_items=[{"name": "수면", "schema": "duration", "unit": None}],
+        now="2026-05-02T09:05:00+09:00",
+    )
+    system_prompt = client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+    assert "명시된 YYYY-MM-DD" in system_prompt
+    assert "recorded_for" in system_prompt
 
 
 def test_parse_record_handles_invalid_json_gracefully():

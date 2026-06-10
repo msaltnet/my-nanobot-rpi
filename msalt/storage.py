@@ -38,7 +38,10 @@ class Storage:
                 schedule_time TEXT NOT NULL,
                 frequency TEXT NOT NULL DEFAULT 'daily',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                last_missed_asked_date TEXT
+                last_missed_asked_date TEXT,
+                pending_since TEXT,
+                pending_recorded_for TEXT,
+                last_asked_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS records (
@@ -69,6 +72,12 @@ class Storage:
             conn.execute(
                 "ALTER TABLE tracked_items ADD COLUMN pending_since TEXT"
             )
+            cols.add("pending_since")
+        if "pending_recorded_for" not in cols:
+            conn.execute(
+                "ALTER TABLE tracked_items ADD COLUMN pending_recorded_for TEXT"
+            )
+            cols.add("pending_recorded_for")
         if "last_asked_at" not in cols:
             conn.execute(
                 "ALTER TABLE tracked_items ADD COLUMN last_asked_at TEXT"
@@ -217,14 +226,24 @@ class Storage:
         finally:
             conn.close()
 
-    def set_pending_since(self, item_id: int, when_utc: str) -> None:
-        """첫 알림 발송 시각(UTC ISO)을 기록."""
+    def set_pending_since(
+        self, item_id: int, when_utc: str, recorded_for: str | None = None
+    ) -> None:
+        """첫 알림 발송 시각(UTC ISO)과 대상 기록 날짜를 기록."""
         conn = self._connect()
         try:
-            conn.execute(
-                "UPDATE tracked_items SET pending_since = ? WHERE id = ?",
-                (when_utc, item_id),
-            )
+            if recorded_for is None:
+                conn.execute(
+                    "UPDATE tracked_items SET pending_since = ? WHERE id = ?",
+                    (when_utc, item_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE tracked_items "
+                    "SET pending_since = ?, pending_recorded_for = ? "
+                    "WHERE id = ?",
+                    (when_utc, recorded_for, item_id),
+                )
             conn.commit()
         finally:
             conn.close()
@@ -234,7 +253,9 @@ class Storage:
         conn = self._connect()
         try:
             conn.execute(
-                "UPDATE tracked_items SET pending_since = NULL WHERE id = ?",
+                "UPDATE tracked_items "
+                "SET pending_since = NULL, pending_recorded_for = NULL "
+                "WHERE id = ?",
                 (item_id,),
             )
             conn.commit()
