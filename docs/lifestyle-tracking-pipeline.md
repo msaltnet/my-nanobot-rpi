@@ -378,7 +378,7 @@ Unit=msalt-tracking-dispatch.service
 ExecStart=/home/pi/my-nanobot-rpi/.venv/bin/python -m msalt.tracking dispatch
 ```
 
-`deploy/setup-rpi.sh`가 실제 repo 경로와 사용자에 맞게 `/home/pi/my-nanobot-rpi`를 치환한다. 현재 rpi가 `/home/ubuntu/my-nanobot-rpi`에 있다면 설치된 unit도 그 경로를 사용한다.
+`deploy/setup-rpi.sh`가 실제 repo 경로와 사용자에 맞게 `/home/pi/my-nanobot-rpi`를 치환한다. 현재 운영 대상 `msalt-oci`는 `/home/ubuntu/my-nanobot-rpi`를 사용하므로 설치된 unit도 그 경로를 사용한다.
 
 확인 명령:
 

@@ -1,5 +1,28 @@
 # my-nanobot-rpi 라즈베리파이 배포 가이드
 
+## 현재 운영 대상
+
+현재 운영 서비스는 Raspberry Pi가 아니라 OCI Ubuntu 인스턴스에서 실행한다.
+
+| 항목 | 값 |
+|------|----|
+| SSH alias | `msalt-oci` |
+| 호스트명 | `instance-20251105-0003` |
+| 사용자 | `ubuntu` |
+| 저장소 | `/home/ubuntu/my-nanobot-rpi` |
+| systemd 서비스 | `my-nanobot-rpi` |
+| tracking timer | `msalt-tracking-dispatch.timer` |
+
+운영 서버 접속과 기본 상태 확인:
+
+```bash
+ssh msalt-oci
+cd /home/ubuntu/my-nanobot-rpi
+systemctl is-active my-nanobot-rpi
+```
+
+이 문서의 Raspberry Pi 설치 절차는 신규 장비 설치용으로 유지한다. 현재 운영 배포와 점검은 위 OCI 대상에서 수행한다.
+
 ## 요구사항
 
 - Raspberry Pi 3B+ (1GB RAM)
