@@ -216,3 +216,38 @@ def test_recent_returns_empty_for_unknown_item(setup):
     _, _, records = setup
     with pytest.raises(KeyError):
         records.recent("없음", days=7, ref_date="2026-04-13")
+
+
+def test_find_recent_missing_prefers_latest_date_and_item_order(setup):
+    """A newer missing response must win over older empty dates."""
+    _, items, records = setup
+    items.add("수면", "duration", None, "08:00")
+    items.add("영어공부", "boolean", None, "22:00")
+    records.upsert("수면", "2026-08-29", value_num=420, raw_input="7시간")
+
+    item, recorded_for = records.find_recent_missing("2026-08-30")
+
+    assert recorded_for == "2026-08-29"
+    assert item["name"] == "영어공부"
+
+
+def test_find_recent_missing_excludes_reference_date_and_stops_after_seven_days(setup):
+    """Today and dates older than seven days must not become follow-ups."""
+    _, items, records = setup
+    items.add("영어공부", "boolean", None, "22:00")
+    for day in range(23, 30):
+        records.upsert(
+            "영어공부", f"2026-08-{day}", value_bool=False, raw_input="안 했어"
+        )
+
+    assert records.find_recent_missing("2026-08-30") is None
+
+
+def test_find_recent_missing_treats_zero_as_recorded(setup):
+    """A stored zero is an answer, not an empty record."""
+    _, items, records = setup
+    items.add("물", "quantity", "잔", "22:00")
+    for day in range(23, 30):
+        records.upsert("물", f"2026-08-{day}", value_num=0, raw_input="0잔")
+
+    assert records.find_recent_missing("2026-08-30") is None

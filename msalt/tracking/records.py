@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from typing import Any
 
 from msalt.storage import Storage
@@ -98,6 +99,19 @@ class RecordManager:
         return self.storage.get_records_for_item(
             item["id"], days=days, ref_date=ref_date
         )
+
+    def find_recent_missing(
+        self, ref_date: str, days: int = 7
+    ) -> tuple[dict, str] | None:
+        """Return the newest unanswered daily item before ``ref_date``."""
+        ref = date.fromisoformat(ref_date)
+        items = self.items.list_all()
+        for offset in range(1, days + 1):
+            recorded_for = (ref - timedelta(days=offset)).isoformat()
+            for item in items:
+                if not self.storage.record_exists(item["id"], recorded_for):
+                    return item, recorded_for
+        return None
 
     def summarize(self, name: str, days: int, ref_date: str) -> str:
         item = self._resolve(name)
