@@ -1,4 +1,5 @@
 import pytest
+
 from msalt.storage import Storage
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.records import RecordManager
