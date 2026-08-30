@@ -148,6 +148,14 @@ def _reply_keyboard_for_items(targets: list[DispatchTarget]) -> ReplyKeyboard | 
     return rows or None
 
 
+def build_missing_follow_up(
+    item: dict, recorded_for: str
+) -> tuple[str, ReplyKeyboard]:
+    """Build the existing retry question and keyboard for one missing record."""
+    target = DispatchTarget(kind="retry", item=item, recorded_for=recorded_for)
+    return _solo_text(target), _reply_keyboard_for_item(item, recorded_for)
+
+
 def _sender_accepts_reply_keyboard(send: Callable[..., None]) -> bool:
     """테스트/기존 호출부의 1-인자 sender와 새 2-인자 sender를 모두 지원한다."""
     try:

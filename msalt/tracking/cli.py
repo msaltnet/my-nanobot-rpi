@@ -13,7 +13,11 @@ import httpx
 from loguru import logger
 
 from msalt.storage import Storage
-from msalt.tracking.dispatcher import Dispatcher, ReplyKeyboard
+from msalt.tracking.dispatcher import (
+    Dispatcher,
+    ReplyKeyboard,
+    build_missing_follow_up,
+)
 from msalt.tracking.items import (
     ItemAlreadyExists,
     ItemNotFound,
@@ -76,6 +80,15 @@ def _make_reply_markup(reply_keyboard: ReplyKeyboard | None) -> dict[str, object
         "resize_keyboard": True,
         "one_time_keyboard": True,
     }
+
+
+def _follow_up_payload(records: RecordManager, ref_date: str) -> dict[str, object]:
+    missing = records.find_recent_missing(ref_date)
+    if missing is None:
+        return {"question": None, "reply_keyboard": []}
+    item, recorded_for = missing
+    question, keyboard = build_missing_follow_up(item, recorded_for)
+    return {"question": question, "reply_keyboard": keyboard}
 
 
 def _record_outbound_in_session(workspace: Path, chat_id: str, text: str) -> None:
@@ -173,6 +186,12 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
             return 2
         print(f"기록되었어: {args.name} {args.date}")
         print(records.advice_after_record(args.name, args.date))
+        try:
+            follow_up = _follow_up_payload(records, args.date)
+        except Exception as exc:
+            print(f"warning: follow-up unavailable: {exc}", file=sys.stderr)
+            follow_up = {"question": None, "reply_keyboard": []}
+        print(f"FOLLOW_UP_JSON: {json.dumps(follow_up, ensure_ascii=False)}")
         return 0
 
     if args.cmd == "summary":

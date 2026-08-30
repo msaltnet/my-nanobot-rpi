@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from msalt.storage import Storage
-from msalt.tracking.dispatcher import Dispatcher
+from msalt.tracking.dispatcher import Dispatcher, build_missing_follow_up
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.records import RecordManager
 
@@ -24,6 +24,21 @@ def setup(tmp_path):
 
 def _kst(y, m, d, h, mi):
     return datetime(y, m, d, h, mi, tzinfo=KST)
+
+
+def test_build_missing_follow_up_uses_boolean_question_and_keyboard():
+    """A boolean follow-up must offer date-qualified yes/no answers."""
+    item = {"name": "영어공부", "schema": "boolean", "unit": None}
+
+    question, keyboard = build_missing_follow_up(item, "2026-08-29")
+
+    assert "영어공부" in question
+    assert "2026-08-29" in question
+    assert "비어 있어" in question
+    assert keyboard == [[
+        "영어공부 2026-08-29 했어",
+        "영어공부 2026-08-29 안 했어",
+    ]]
 
 
 # --- 기본 동작 ---

@@ -1,9 +1,12 @@
+import json
+
 import pytest
 from nanobot.session.manager import SessionManager
 
 from msalt.storage import Storage
 from msalt.tracking.cli import _make_reply_markup, _make_telegram_sender, run_command
 from msalt.tracking.items import TrackedItemManager
+from msalt.tracking.records import RecordManager
 
 
 @pytest.fixture
@@ -54,6 +57,95 @@ def test_record_command(db_path, capsys):
     out = capsys.readouterr().out
     assert "기록되었어: 수면 2026-04-13" in out
     assert "최근 7일" in out
+
+
+def test_record_command_outputs_recent_missing_follow_up(db_path, capsys):
+    """Saving today's sleep must ask for yesterday's missing English record."""
+    s = Storage(db_path)
+    items = TrackedItemManager(s)
+    items.add("수면", "duration", None, "08:00")
+    items.add("영어공부", "boolean", None, "22:00")
+    RecordManager(s, items).upsert(
+        "수면", "2026-08-29", value_num=420, raw_input="7시간"
+    )
+
+    rc = run_command(
+        [
+            "record", "수면", "--date", "2026-08-30",
+            "--num", "360", "--raw", "6시간",
+        ],
+        db_path=db_path,
+    )
+
+    assert rc == 0
+    lines = capsys.readouterr().out.splitlines()
+    saved_index = next(
+        i for i, line in enumerate(lines) if line.startswith("기록되었어:")
+    )
+    follow_up_index = next(
+        i for i, line in enumerate(lines) if line.startswith("FOLLOW_UP_JSON: ")
+    )
+    payload = json.loads(lines[follow_up_index].removeprefix("FOLLOW_UP_JSON: "))
+    assert saved_index < follow_up_index
+    assert "영어공부" in payload["question"]
+    assert payload["reply_keyboard"][0][0] == "영어공부 2026-08-29 했어"
+
+
+def test_record_command_outputs_empty_follow_up_when_recent_records_are_complete(
+    db_path, capsys
+):
+    """A complete recent window must remove, rather than replace, the keyboard."""
+    s = Storage(db_path)
+    items = TrackedItemManager(s)
+    items.add("수면", "duration", None, "08:00")
+    records = RecordManager(s, items)
+    for day in range(23, 30):
+        records.upsert("수면", f"2026-08-{day}", value_num=420, raw_input="7시간")
+
+    run_command(
+        [
+            "record", "수면", "--date", "2026-08-30",
+            "--num", "360", "--raw", "6시간",
+        ],
+        db_path=db_path,
+    )
+
+    line = next(
+        value for value in capsys.readouterr().out.splitlines()
+        if value.startswith("FOLLOW_UP_JSON: ")
+    )
+    assert json.loads(line.removeprefix("FOLLOW_UP_JSON: ")) == {
+        "question": None,
+        "reply_keyboard": [],
+    }
+
+
+def test_record_command_keeps_save_success_when_follow_up_fails(
+    db_path, capsys, monkeypatch
+):
+    """Optional follow-up failure must not turn a committed save into failure."""
+    s = Storage(db_path)
+    items = TrackedItemManager(s)
+    items.add("수면", "duration", None, "08:00")
+
+    def fail_follow_up(self, ref_date, days=7):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(RecordManager, "find_recent_missing", fail_follow_up)
+
+    rc = run_command(
+        [
+            "record", "수면", "--date", "2026-08-30",
+            "--num", "360", "--raw", "6시간",
+        ],
+        db_path=db_path,
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "기록되었어: 수면 2026-08-30" in captured.out
+    assert "warning: follow-up unavailable: boom" in captured.err
+    assert s.record_exists(items.get("수면")["id"], "2026-08-30")
 
 
 def test_record_command_outputs_advice(db_path, capsys):
