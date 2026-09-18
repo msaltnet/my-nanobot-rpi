@@ -27,7 +27,7 @@ nanobot 프레임워크를 기반으로 라즈베리파이 3B+에서 구동되�
 
 **기능**
 - GPT 기반 요약 브리핑 생성
-- 하루 2회 자동 브리핑 (아침 07:00, 저녁 19:00)
+- 하루 3회 자동 브리핑 (아침 07:00, 오후 14:00, 저녁 20:00)
 - 키워드 검색, 주간 요약 등 대화형 요청 지원
 - `my-nanobot-rpi doctor`로 소스 연결 상태 상시 점검
 
@@ -103,10 +103,14 @@ pip install -e .              # my-nanobot-rpi
 
 # 3. 환경 변수 설정
 cp .env.example .env
-# .env 편집 — 3개 값 입력:
+# .env 편집 — 필수 3개 값 입력:
 #   OPENAI_API_KEY=sk-...
 #   TELEGRAM_BOT_TOKEN=... (@BotFather)
 #   TELEGRAM_USER_ID=...   (@userinfobot, 숫자 ID)
+#
+# 뉴스 검색 보강을 사용하려면 아래 키도 추가:
+#   TAVILY_API_KEY=tvly-...
+#   BRAVE_API_KEY=BSA...
 
 # 4. 기동 — .env 자동 로드, config·workspace 자동 seed
 my-nanobot-rpi
@@ -149,4 +153,3 @@ my-nanobot-rpi news search 금리
 - 블로그/뉴스레터 (Substack, 개별 이코노미스트)
 - 텔레그램 인라인 버튼/메뉴 UI
 - 데이터 시각화 (차트 이미지 생성)
-

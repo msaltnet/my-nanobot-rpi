@@ -62,9 +62,10 @@ def test_seed_substitutes_telegram_user_id_in_cron_jobs(tmp_path, monkeypatch):
     assert jobs_file.exists()
     data = json.loads(jobs_file.read_text(encoding="utf-8"))
     jobs = data["jobs"]
-    assert len(jobs) == 2
+    assert len(jobs) == 3
     assert {j["id"] for j in jobs} == {
         "msalt-news-briefing-morning",
+        "msalt-news-briefing-afternoon",
         "msalt-news-briefing-evening",
     }
     # ${TELEGRAM_USER_ID} 치환 확인
@@ -74,7 +75,8 @@ def test_seed_substitutes_telegram_user_id_in_cron_jobs(tmp_path, monkeypatch):
     # 스케줄
     schedules = {j["id"]: j["schedule"]["expr"] for j in jobs}
     assert schedules["msalt-news-briefing-morning"] == "0 7 * * *"
-    assert schedules["msalt-news-briefing-evening"] == "0 19 * * *"
+    assert schedules["msalt-news-briefing-afternoon"] == "0 14 * * *"
+    assert schedules["msalt-news-briefing-evening"] == "0 20 * * *"
 
 
 def test_seed_leaves_placeholder_when_telegram_user_id_missing(tmp_path, monkeypatch):

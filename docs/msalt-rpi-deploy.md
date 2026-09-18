@@ -114,7 +114,7 @@ BRAVE_API_KEY=BSA...
 | `~/.nanobot/workspace/SOUL.md` | 봇 페르소나 |
 | `~/.nanobot/workspace/USER.md` | 사용자 프로필 |
 | `~/.nanobot/workspace/skills/{news,news-briefing,tracking}/` | msalt 스킬 |
-| `~/.nanobot/workspace/cron/jobs.json` | 07:00/19:00 KST 자동 브리핑 크론 잡 (`${TELEGRAM_USER_ID}` 치환됨) |
+| `~/.nanobot/workspace/cron/jobs.json` | 07:00/14:00/20:00 KST 자동 브리핑 크론 잡 (`${TELEGRAM_USER_ID}` 치환됨) |
 
 점검 커맨드:
 
@@ -161,7 +161,7 @@ sudo systemctl disable my-nanobot-rpi
 
 ## 자동 브리핑 (nanobot cron)
 
-nanobot 내장 크론이 `~/.nanobot/workspace/cron/jobs.json`을 읽어 평일 07:00/19:00 KST에 `news-briefing` 스킬을 트리거하고, 결과를 텔레그램으로 자동 발송합니다. 별도 systemd 타이머 없이 `my-nanobot-rpi` 프로세스 자체가 처리합니다.
+nanobot 내장 크론이 `~/.nanobot/workspace/cron/jobs.json`을 읽어 매일 07:00/14:00/20:00 KST에 `news-briefing` 스킬을 트리거하고, 결과를 텔레그램으로 자동 발송합니다. 별도 systemd 타이머 없이 `my-nanobot-rpi` 프로세스 자체가 처리합니다.
 
 ### 잡 확인
 

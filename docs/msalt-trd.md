@@ -114,7 +114,7 @@ msalt/
 ### 3.1 인프라 레이어 (L1)
 
 **`msalt/config.py` — MsaltConfig**
-모든 msalt 모듈이 공유하는 설정값을 단일 데이터클래스로 보관한다. 타임존(`Asia/Seoul`), SQLite 경로(`~/.nanobot/workspace/msalt.db`), 브리핑 시각(07:00, 19:00) 등을 노출한다. 환경별 분기는 없다 — 1인용·단일 환경 가정.
+모든 msalt 모듈이 공유하는 설정값을 단일 데이터클래스로 보관한다. 타임존(`Asia/Seoul`), SQLite 경로(`~/.nanobot/workspace/msalt.db`), 브리핑 시각(07:00, 14:00, 20:00) 등을 노출한다. 환경별 분기는 없다 — 1인용·단일 환경 가정.
 
 **`msalt/storage.py` — Storage**
 SQLite 3개 테이블(`news_articles`, `tracked_items`, `records`)에 대한 CRUD를 담당한다. 모든 도메인 모듈은 이 클래스만을 통해 DB에 접근한다. 트랜잭션·커넥션 관리·`initialize()`(테이블 생성) 책임. 비즈니스 로직(통계·요약·디스패처)은 일절 포함하지 않는 순수 I/O 레이어.
@@ -159,7 +159,7 @@ gpt-5-mini 단발 호출로 두 가지를 처리: (1) 기록 입력 자연어 �
 
 **`news/SKILL.md`** — 대화형 뉴스 스킬. 사용자가 "최근 뉴스 보여줘", "삼성전자 관련 기사 찾아줘" 같은 자유 질의를 던졌을 때 LLM이 이 스킬을 호출.
 
-**`news-briefing/SKILL.md`** — 크론 스케줄 전용 스킬. `metadata: {"always": false}`로 일반 대화에서는 노출되지 않고, 07:00/19:00 cron 트리거에서만 호출된다.
+**`news-briefing/SKILL.md`** — 크론 스케줄 전용 스킬. `metadata: {"always": false}`로 일반 대화에서는 노출되지 않고, 07:00/14:00/20:00 cron 트리거에서만 호출된다.
 
 **`tracking/SKILL.md`** — 추적 항목 통합 스킬. 사용자 의도(기록·항목 추가/삭제·조회·통계)에 따라 적절한 tracking 서브커맨드로 라우팅.
 

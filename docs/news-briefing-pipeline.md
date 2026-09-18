@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart TD
-    Cron["nanobot cron<br/>07:00 / 19:00 KST"] --> Skill["news-briefing skill"]
+    Cron["nanobot cron<br/>07:00 / 14:00 / 20:00 KST"] --> Skill["news-briefing skill"]
     Skill --> CollectCmd["my-nanobot-rpi news collect"]
     CollectCmd --> Collector["NewsCollector"]
     Collector --> RSS["RSS feeds"]
@@ -42,7 +42,7 @@ flowchart TD
 | `msalt/storage.py` | SQLite 테이블 생성, 기사 저장, 브리핑 사용 이력 저장 |
 | `msalt/skills/news/SKILL.md` | 대화형 뉴스 요청용 스킬 |
 | `msalt/skills/news-briefing/SKILL.md` | 정기 브리핑용 스킬 |
-| `msalt/workspace/cron/jobs.json` | 07:00/19:00 KST 자동 브리핑 job seed |
+| `msalt/workspace/cron/jobs.json` | 07:00/14:00/20:00 KST 자동 브리핑 job seed |
 
 ## 실행 명령
 
@@ -65,7 +65,8 @@ my-nanobot-rpi news search "금리"
 | job | 스케줄 | 메시지 |
 | --- | --- | --- |
 | `msalt-news-briefing-morning` | 매일 07:00 KST | 아침 경제 브리핑 생성 |
-| `msalt-news-briefing-evening` | 매일 19:00 KST | 저녁 경제 브리핑 생성 |
+| `msalt-news-briefing-afternoon` | 매일 14:00 KST | 오후 경제 브리핑 생성 |
+| `msalt-news-briefing-evening` | 매일 20:00 KST | 저녁 경제 브리핑 생성 |
 
 실제 운영 중인 파일은 `~/.nanobot/workspace/cron/jobs.json`이다. `my-nanobot-rpi` 실행 또는 `my-nanobot-rpi doctor` 실행 시 `msalt/cli.py`의 seed 동기화 로직이 패키지의 최신 스킬과 cron 템플릿을 workspace에 반영한다. 기존 job의 `enabled`, `state`, 실행 이력은 보존한다.
 

@@ -13,5 +13,5 @@ class MsaltConfig:
     news_sources_path: str = _DEFAULT_SOURCES
     db_path: str = _DEFAULT_DB
     briefing_morning: str = "07:00"
-    briefing_evening: str = "19:00"
+    briefing_evening: str = "20:00"
     collect_before_min: int = 30  # 브리핑 전 수집 시작 (분)

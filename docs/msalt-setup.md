@@ -39,10 +39,14 @@ pip install -e .
 
 # 3. 환경 변수
 cp .env.example .env
-# .env 편집 — 3개 값 입력:
+# .env 편집 — 필수 3개 값 입력:
 #   OPENAI_API_KEY=sk-...
 #   TELEGRAM_BOT_TOKEN=...
 #   TELEGRAM_USER_ID=...   (숫자 ID)
+#
+# 뉴스 검색 보강을 사용하려면 아래 키도 추가:
+#   TAVILY_API_KEY=tvly-...
+#   BRAVE_API_KEY=BSA...
 
 # 4. 기동
 my-nanobot-rpi
@@ -64,6 +68,8 @@ my-nanobot-rpi doctor
 
 `.env`에 `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`를 넣으면 해당 provider가
 자동으로 사용됩니다. 키가 없으면 DuckDuckGo로 fallback.
+
+자동 뉴스 브리핑은 매일 07:00, 14:00, 20:00 (Asia/Seoul)에 실행됩니다.
 
 `~/.nanobot/config.json`의 `tools.web.search.provider` 필드로 선택:
 `tavily` (기본) / `brave` / `duckduckgo`.
