@@ -10,8 +10,9 @@ description: 경제 뉴스를 검색하고 요약합니다. 사용자가 뉴스,
 ## 최신 뉴스 브리핑 요청 시
 
 ```bash
-my-nanobot-rpi news briefing           # 아침 (기본)
-my-nanobot-rpi news briefing evening   # 저녁
+my-nanobot-rpi news briefing            # 아침 (기본)
+my-nanobot-rpi news briefing afternoon  # 점심
+my-nanobot-rpi news briefing evening    # 저녁
 ```
 
 ## 키워드로 뉴스 검색 시

@@ -47,7 +47,7 @@ def run_search(keyword: str) -> str:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python -m msalt.news.cli [collect|briefing|search <keyword>]")
+        print("Usage: python -m msalt.news.cli [collect|briefing [morning|afternoon|evening]|search <keyword>]")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -55,7 +55,11 @@ def main():
         print(run_collect())
     elif command == "briefing":
         time = sys.argv[2] if len(sys.argv) > 2 else "morning"
-        print(run_briefing(time))
+        try:
+            print(run_briefing(time))
+        except ValueError as e:
+            print(f"오류: {e}")
+            sys.exit(1)
     elif command == "search":
         if len(sys.argv) < 3:
             print("Usage: python -m msalt.news.cli search <keyword>")

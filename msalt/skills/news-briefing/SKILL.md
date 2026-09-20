@@ -13,9 +13,10 @@ metadata: {"always": false}
 my-nanobot-rpi news collect
 ```
 
-2. 브리핑 생성 (저녁이면 `evening` 인자):
+2. 브리핑 생성 (점심은 `afternoon`, 저녁은 `evening` 인자):
 ```bash
 my-nanobot-rpi news briefing
+my-nanobot-rpi news briefing afternoon
 my-nanobot-rpi news briefing evening
 ```
 

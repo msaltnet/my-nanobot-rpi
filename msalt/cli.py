@@ -355,8 +355,8 @@ def news_collect() -> None:
     console.print(run_collect())
 
 
-@news_app.command("briefing", help="아침/저녁 브리핑 한 번 생성.")
-def news_briefing(time_of_day: str = typer.Argument("morning", help="morning 또는 evening")) -> None:
+@news_app.command("briefing", help="아침/점심/저녁 브리핑 한 번 생성.")
+def news_briefing(time_of_day: str = typer.Argument("morning", help="morning, afternoon 또는 evening")) -> None:
     _load_dotenv()
     from msalt.news.cli import run_briefing
     console.print(run_briefing(time_of_day))

@@ -18,6 +18,11 @@ CATEGORY_LABELS = {
 }
 
 CATEGORY_ORDER = ["domestic", "international", "policy"]
+BRIEFING_LABELS = {
+    "morning": "아침",
+    "afternoon": "점심",
+    "evening": "저녁",
+}
 
 SYSTEM_PROMPT = (
     "당신은 한국어 경제 뉴스 편집자다. 주어진 기사 목록을 읽고 "
@@ -83,7 +88,7 @@ class BriefingGenerator:
         articles = self.get_articles_for_briefing(
             since_date=_briefing_since_utc(time_of_day)
         )
-        label = "아침" if time_of_day == "morning" else "저녁"
+        label = BRIEFING_LABELS[time_of_day]
 
         if not articles:
             return f"{label} 경제 브리핑 - 수집된 뉴스가 없습니다."
@@ -163,7 +168,10 @@ def _build_user_prompt(articles: list[dict]) -> str:
 
 
 def _briefing_since_utc(time_of_day: str, now: datetime | None = None) -> str:
-    """아침/저녁 브리핑이 서로 같은 기사를 다시 보지 않도록 시간창을 나눈다."""
+    """아침/점심/저녁 브리핑의 시작 시각을 KST 기준으로 나눈다."""
+    if time_of_day not in BRIEFING_LABELS:
+        raise ValueError("time_of_day must be one of: morning, afternoon, evening")
+
     current = now or datetime.now(BRIEFING_TZ)
     if current.tzinfo is None:
         current = current.replace(tzinfo=BRIEFING_TZ)
@@ -173,8 +181,10 @@ def _briefing_since_utc(time_of_day: str, now: datetime | None = None) -> str:
         local_since = (current - timedelta(days=1)).replace(
             hour=19, minute=0, second=0, microsecond=0
         )
-    else:
+    elif time_of_day == "afternoon":
         local_since = current.replace(hour=7, minute=0, second=0, microsecond=0)
+    else:
+        local_since = current.replace(hour=14, minute=0, second=0, microsecond=0)
 
     return local_since.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 

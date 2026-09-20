@@ -28,6 +28,14 @@ def test_format_briefing_plain_mode(mock_storage):
     assert "Fed holds rates" in text
 
 
+def test_format_briefing_afternoon_uses_lunch_label(mock_storage):
+    gen = BriefingGenerator(storage=mock_storage, use_llm=False)
+
+    text = gen.format_briefing("afternoon")
+
+    assert "점심 경제 브리핑" in text
+
+
 def test_format_briefing_includes_policy_section():
     storage = MagicMock()
     storage.get_articles_since.return_value = [
@@ -104,7 +112,13 @@ def test_briefing_since_splits_morning_and_evening_windows():
     now = datetime(2026, 5, 23, 19, 10, tzinfo=ZoneInfo("Asia/Seoul"))
 
     assert _briefing_since_utc("morning", now) == "2026-05-22 10:00:00"
-    assert _briefing_since_utc("evening", now) == "2026-05-22 22:00:00"
+    assert _briefing_since_utc("afternoon", now) == "2026-05-22 22:00:00"
+    assert _briefing_since_utc("evening", now) == "2026-05-23 05:00:00"
+
+
+def test_briefing_since_rejects_unknown_time_of_day():
+    with pytest.raises(ValueError, match="morning, afternoon, evening"):
+        _briefing_since_utc("night")
 
 
 # LLM 모드 테스트 — OpenAI 호출을 mock해 네트워크 없이 동작 확인
