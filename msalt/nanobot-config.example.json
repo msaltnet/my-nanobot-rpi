@@ -1,7 +1,7 @@
 {
   "agents": {
     "defaults": {
-      "model": "gpt-5-mini",
+      "model": "gpt-5.6-luna",
       "workspace": "~/.nanobot/workspace",
       "maxTokens": 4096,
       "contextWindowTokens": 16000,
@@ -16,7 +16,8 @@
   },
   "providers": {
     "openai": {
-      "apiKey": "${OPENAI_API_KEY}"
+      "apiKey": "${OPENAI_API_KEY}",
+      "apiType": "responses"
     }
   },
   "channels": {
