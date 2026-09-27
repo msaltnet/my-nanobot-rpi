@@ -30,6 +30,9 @@ dev = [
 [project.scripts]
 my-nanobot-rpi = "msalt.cli:app"
 
+[project.entry-points."nanobot.tools"]
+tracking_reply = "msalt.tracking.reply_tool:TrackingReplyTool"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
