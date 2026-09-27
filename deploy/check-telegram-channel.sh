@@ -20,7 +20,7 @@ last_timeout=$(journalctl -u "${SERVICE}" --since "${SINCE}" --no-pager -o cat 2
     | xargs -I{} date -d "{}" +%s 2>/dev/null || true)
 
 last_connected=$(journalctl -u "${SERVICE}" --since "${SINCE}" --no-pager -o cat 2>/dev/null \
-    | grep -E 'Telegram bot @[^ ]+ connected' \
+    | grep -E '([Tt]elegram )?bot @[^ ]+ connected' \
     | tail -1 \
     | awk '{print $1" "$2}' \
     | xargs -I{} date -d "{}" +%s 2>/dev/null || true)
