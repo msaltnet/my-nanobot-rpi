@@ -259,6 +259,9 @@ def gateway() -> None:
         raise typer.Exit(code=1)
 
     # nanobot gateway로 인수 넘겨 기동
+    from msalt.responses_compat import install_responses_compat
+
+    install_responses_compat()
     from nanobot.cli.commands import app as nanobot_app
     sys.argv = ["nanobot", "gateway"]
     nanobot_app()
