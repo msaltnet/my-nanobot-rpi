@@ -4,7 +4,7 @@
       "model": "gpt-5.6-luna",
       "workspace": "~/.nanobot/workspace",
       "maxTokens": 4096,
-      "contextWindowTokens": 16000,
+      "contextWindowTokens": 64000,
       "maxToolIterations": 50,
       "timezone": "Asia/Seoul",
       "dream": {

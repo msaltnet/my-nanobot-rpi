@@ -103,6 +103,9 @@ def _seed_if_missing() -> list[str]:
     cron_target = workspace_dir / "cron" / "jobs.json"
     if SEED_CRON_JOBS.exists() and _sync_seed_cron_jobs(cron_target):
         created.append(str(cron_target))
+    from msalt.runtime_migration import maintain_runtime
+
+    created.extend(maintain_runtime(NANOBOT_HOME))
     return created
 
 
