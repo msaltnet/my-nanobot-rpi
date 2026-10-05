@@ -3,6 +3,9 @@
 업데이트·후보 배포·백업·격리 복구·롤백은 [공통 운영 절차](development/operations-runbook.md)를 따른다.
 실제 대상·버전·경로·검증 결과는 [비공개 운영 기록 양식](development/private-operations-record-template.md)에 기록한다.
 문서만으로 RPi/OCI 설치·복구 검증을 통과한 것은 아니다.
+배포 대상은 `.env.example`의 `DEPLOY_*` 항목을 비공개 `.env`에 채워 지정할 수 있다.
+이 값은 운영 대상 기록용이며 앱/설치 스크립트의 자동 배포 기능이 아니다.
+변수 대응과 실행 승인 확인은 [대상 지정 절차](development/operations-runbook.md#env로-운영-대상-지정)를 따른다.
 
 ## 지원 환경과 설치 경로
 

@@ -75,8 +75,10 @@ Ready 조회 결과가 비어 있으면 현재 구현할 승인 큐가 없는 �
 
 ## 운영 기록과 강제 범위
 
-2026-10-05 세 상태 라벨 생성과 Issue #2의 Planning 라벨을 실제 확인했다.
-Ready 전환은 보류했으며 실제 승인 큐 조회 결과는 비어 있었다.
+2026-10-05 세 상태 라벨 생성 후 Issue #2를 Planning으로 관리했다.
+이후 Human의 명시적 Ready 전환 승인에 따라 Planning을 제거하고 Ready for Implementation을 적용했다.
+[승인 기록](https://github.com/msaltnet/my-nanobot-rpi/issues/2#issuecomment-5995427906)과
+단일 상태 라벨·Ready 큐의 #2 조회 결과를 확인했다.
 Issue #1은 이번 작업의 전환 대상이 아니며 승인·상태를 추정해 변경하지 않았다.
 
 문서와 라벨은 운영 계약이며 Git push/Merge의 서버 측 차단 장치는 아니다.

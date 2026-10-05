@@ -20,6 +20,27 @@ RPi/OCI 단일 Linux 호스트에서 운영자가 지정한 사용자·설치 �
 Python 호환 버전은 upstream 최신 버전이 아니라 후보 submodule의 `pyproject.toml`로 확인한다.
 호환 의존성 설치 성공은 `pip check`와 실제 기동까지 확인한다.
 
+## .env로 운영 대상 지정
+
+`.env.example`의 `DEPLOY_*` 항목을 비공개 `.env`에 채워 검증 대상을 기록한다.
+앱 설치 필수 설정은 아니며 앱/설치 스크립트가 이 값으로 자동 접속·배포하지 않는다.
+운영자 또는 배포 Agent가 해당 값만 비공개로 확인하고, 원격 대상에 접속한 뒤 아래 변수에 대응시킨다.
+`.env` 전체를 shell에서 source하거나 내용을 출력하지 않는다. 비밀번호·토큰을 SSH 대상 값에 넣지 않는다.
+
+| .env 항목 | 의미와 운영 절차의 대응 |
+|---|---|
+| `DEPLOY_PLATFORM` | `rpi` 또는 `oci`; 플랫폼별 점검 기준 선택 |
+| `DEPLOY_SSH_TARGET` | 운영자가 정한 SSH 별칭/접속 대상; 접근 방법은 비공개 기록에 보관 |
+| `DEPLOY_REPO_DIR` | 대상 호스트 checkout 절대 경로 → 대상 shell의 `REPO_DIR` |
+| `DEPLOY_RUN_USER` | 대상 서비스 실행 사용자 → `RUN_USER`; 실제 home은 대상에서 조회 |
+| `DEPLOY_BACKUP_DIR` | 대상의 비공개 백업 루트 절대 경로 → `BACKUP_ROOT` |
+
+비어 있거나 대상·경로·사용자가 실제 유닛과 맞지 않으면 접속·백업·업데이트를 진행하지 않는다.
+백업 위치는 checkout/workspace와 겹치지 않는 실체 경로여야 한다.
+배포 대상 지정은 대상 선택일 뿐 실행 승인이 아니다. 후보 SHA·정지 시간·데이터 영향·
+Telegram/API 호출·복구 범위는 Issue/PR의 Human 승인과 별도로 대조한다.
+새 설정 인터페이스나 원격 배포 프로그램이 필요해지면 별도 Issue로 설계한다.
+
 ## 사전 점검과 경로
 
 아래 값은 실제 운영 환경으로 지정한다. 실행 사용자와 해당 사용자의 홈을 systemd 유닛과 대조한다.

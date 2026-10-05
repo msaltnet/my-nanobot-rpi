@@ -11,6 +11,8 @@
 - Issue/PR, 승인 메시지, 승인한 Human:
 - 승인 범위: 중단 시간, 백업/복원, 데이터 영향, Telegram/API 호출, 비용:
 - 추가 writer/scheduler와 정지 방법:
+- 비공개 `.env`의 DEPLOY_PLATFORM/SSH_TARGET/REPO_DIR/RUN_USER/BACKUP_DIR 항목과 실제 대상 일치 확인:
+- DEPLOY 항목은 대상 기록이며 실행 승인·앱 자동 배포 설정이 아님을 확인:
 
 ## 버전과 경로
 

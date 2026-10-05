@@ -50,6 +50,7 @@ CI PASS만으로 배포·실사용 완료나 Merge 승인을 대신하지 않는
 
 - [ ] 현재 준비된 AGENTS·Issue/PR 템플릿·개발 가이드를 검토하고 기본 브랜치에 반영한다.
 - [x] Open / Planning / Ready for Implementation 세 Issue 상태 라벨을 만들고 라벨 조회를 확인한다. Projects 보드는 사용하지 않는다. Ready 전환은 Human 승인 근거를 확인한 후 적용한다.
+- [x] 운영 대상 지정용 DEPLOY 항목을 `.env.example`에 제공하고 runbook 변수와 대응시킨다. 실제 값 입력·서버 접속·배포 검증은 별도다.
 - [ ] RPi/OCI 공통 운영 요구사항과 점검 방법을 문서화한다: 코드 버전 확인, Python·nanobot 호환 버전, 서비스·타이머 설치, DB·워크스페이스 경로 선택·확인 절차. 실제 값은 운영자별 비공개 기록으로 관리한다.
 - [ ] RPi와 OCI 각각의 설치·기동·업데이트·smoke 절차를 제공하고, 사용자명·설치 위치·SSH 연결을 환경에 맞게 지정할 수 있도록 한다.
 - [ ] SQLite·설정·워크스페이스의 일관된 백업 및 복구 절차를 만들고 운영 데이터와 분리된 환경에서 복구를 확인한다.
@@ -68,7 +69,8 @@ RPi/OCI 모두에 적용 가능한 절차와 환경 차이를 확인하고, 실�
 문서 범위 설계와 Human 승인 근거를 기록했다. [공통 운영 절차](development/operations-runbook.md)와
 [비공개 운영 기록 양식](development/private-operations-record-template.md)을 준비했다.
 Human의 “project 보드 없이 진행하자” 지시에 따라 상태 기준을 Issue 라벨로 변경했다.
-세 라벨을 실제 생성하고 #2는 Planning으로 적용했다. Ready 전환은 별도 승인 확인 전 보류한다.
+세 라벨을 실제 생성했고 [Human 명시 승인](https://github.com/msaltnet/my-nanobot-rpi/issues/2#issuecomment-5995427906) 후
+#2에 Ready for Implementation 하나만 적용했다. `.env` 배포 대상 항목·운영 변수 대응도 문서로 제공한다.
 RPi/OCI 실제 설치·기동·백업/복구·후보 배포는 미수행이며 0단계 전체 완료 상태는 아니다.
 
 ## 단계 1. 기존 뉴스·생활 기록 안정화
