@@ -1,33 +1,44 @@
-# my-nanobot-rpi 라즈베리파이 배포 가이드
+# my-nanobot-rpi RPi / OCI 배포 가이드
 
-## 현재 운영 대상
+업데이트·후보 배포·백업·격리 복구·롤백은 [공통 운영 절차](development/operations-runbook.md)를 따른다.
+실제 대상·버전·경로·검증 결과는 [비공개 운영 기록 양식](development/private-operations-record-template.md)에 기록한다.
+문서만으로 RPi/OCI 설치·복구 검증을 통과한 것은 아니다.
+배포 대상은 `.env.example`의 `DEPLOY_*` 항목을 비공개 `.env`에 채워 지정할 수 있다.
+이 값은 운영 대상 기록용이며 앱/설치 스크립트의 자동 배포 기능이 아니다.
+변수 대응과 실행 승인 확인은 [대상 지정 절차](development/operations-runbook.md#env로-운영-대상-지정)를 따른다.
 
-현재 운영 서비스는 Raspberry Pi가 아니라 OCI Ubuntu 인스턴스에서 실행한다.
+## 지원 환경과 설치 경로
 
-| 항목 | 값 |
-|------|----|
-| SSH alias | `msalt-oci` |
-| 호스트명 | `instance-20251105-0003` |
-| 사용자 | `ubuntu` |
-| 저장소 | `/home/ubuntu/my-nanobot-rpi` |
-| systemd 서비스 | `my-nanobot-rpi` |
-| tracking timer | `msalt-tracking-dispatch.timer` |
+이 프로젝트는 Raspberry Pi와 OCI Cloud Instance의 단일 Linux 호스트에서 실행할 수 있다.
+운영자는 자신의 장비, 로그인 사용자, 저장소 설치 위치와 연결 방법을 선택한다.
+특정 SSH 별칭·호스트명·계정을 사용해야 하는 것은 아니다.
 
-운영 서버 접속과 기본 상태 확인:
+| 항목 | RPi 예시 | OCI 예시 |
+|------|----------|----------|
+| 장비 | Raspberry Pi 3B+ | Linux Cloud Instance |
+| OS | Raspberry Pi OS / Ubuntu | Ubuntu |
+| 사용자·저장소 위치 | 운영자가 지정 | 운영자가 지정 |
+| 프로세스 관리 | systemd | systemd |
+
+설치 후 공통 상태 확인:
 
 ```bash
-ssh msalt-oci
-cd /home/ubuntu/my-nanobot-rpi
 systemctl is-active my-nanobot-rpi
+systemctl list-timers msalt-tracking-dispatch.timer
 ```
 
-이 문서의 Raspberry Pi 설치 절차는 신규 장비 설치용으로 유지한다. 현재 운영 배포와 점검은 위 OCI 대상에서 수행한다.
+아래 `/home/pi`와 `pi`는 설치 예시다. OCI 등 다른 환경에서는 실제 사용자와 설치 경로를 사용한다.
+`deploy/setup-rpi.sh`는 실행한 저장소 위치와 사용자에 맞춰 서비스 설정을 치환한다.
+설정·워크스페이스의 기본 위치는 실행 사용자의 `~/.nanobot/`이므로 설치 및 서비스 실행 사용자를 일치시킨다.
+실제 서버 주소·코드 버전·설치 경로·서비스 상태·백업 위치는 각 운영자의 비공개 운영 기록에 남긴다.
 
 ## 요구사항
 
-- Raspberry Pi 3B+ (1GB RAM)
-- Raspberry Pi OS Lite (64-bit 권장)
+- Raspberry Pi 또는 OCI Cloud Instance의 Linux 호스트
+- RPi 예시: Raspberry Pi 3B+ (1GB RAM), Raspberry Pi OS Lite / Ubuntu
+- OCI 예시: Ubuntu Linux 인스턴스
 - Python 3.11+
+- 부모 커밋이 지정한 nanobot submodule의 Python 요구 버전과도 호환되어야 함
 - 인터넷 연결
 - 시스템 시간대 `Asia/Seoul` 권장 (`sudo timedatectl set-timezone Asia/Seoul`)
 
@@ -55,6 +66,12 @@ Ubuntu 등 다른 사용자/경로여도 됩니다 (예: `/home/ubuntu/my-nanobo
 
 ### 2. 자동 설정 스크립트 실행
 
+최초 설치용 절차다. 스크립트는 swap·시스템 패키지를 변경하고 tracking·watchdog timer를
+즉시 활성화한다. 운영 자격증명과 데이터를 복사한 검증 호스트에서 그대로 실행하지 않는다.
+RPi/OCI 이미지가 `python3.11`, `python3.11-venv`, `python3.11-dev`를 제공하는지 먼저 확인한다.
+RPi는 ARM 의존성 설치·메모리 피크를, OCI는 이미지 패키지와 outbound 연결을 점검한다.
+패키지가 없다면 호환 Python을 준비해 아래 수동 설치를 사용한다.
+
 ```bash
 bash deploy/setup-rpi.sh
 ```
@@ -71,13 +88,38 @@ bash deploy/setup-rpi.sh
 - `msalt-tracking-dispatch.timer` 등록 + enable + start (30분 주기)
 - `my-nanobot-rpi-watchdog.timer` 등록 + enable + start (텔레그램 채널 watchdog)
 
-**스크립트 재실행은 안전합니다.** `.env`는 덮어쓰지 않고, 유닛 파일만 새 버전으로 갱신합니다. 단, **이미 실행 중인 서비스는 자동 재시작되지 않으므로** 유닛 변경을 반영하려면 명시적으로:
+스크립트 재실행은 `.env`를 보존하지만 패키지·swap·venv·seed·유닛·timer를 변경합니다.
+기존 운영 업데이트는 공통 절차에 따라 백업과 writer 정지 후 진행합니다.
+gateway는 자동 재시작하지 않으므로 승인된 변경을 반영하려면 명시적으로:
 
 ```bash
 sudo systemctl restart my-nanobot-rpi
 sudo systemctl restart msalt-tracking-dispatch.timer
 sudo systemctl restart my-nanobot-rpi-watchdog.timer
 ```
+
+최초 설정 전에는 두 timer와 실행 중인 oneshot/gateway를 정지하고,
+설정·수신 대상을 확인한 뒤 필요한 서비스만 시작합니다.
+
+### 수동 설치 (RPi / OCI 공통)
+
+실행 사용자 소유 checkout에서 선택한 호환 Python으로 설치합니다.
+아래 `python3.11`을 환경의 호환 실행파일로 바꿀 수 있습니다. 기존 운영은 공통 절차의 백업을 먼저 수행합니다.
+
+```bash
+git submodule update --init --recursive
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -e ./nanobot
+.venv/bin/python -m pip install -e .
+.venv/bin/python -m pip check
+```
+
+`.env`를 비공개로 준비하고 `doctor`로 seed한 다음 아래 PATH 관련 절차로
+`tools.exec.path_append`를 지정합니다. `doctor`는 파일 동기화·maintenance와 외부 소스 점검을 수행합니다.
+`deploy/`의 다섯 service/timer 템플릿에서 gateway/dispatcher `User`, 저장소·venv·환경 파일 경로와
+watchdog `ExecStart`를 실제 값으로 치환해 `/etc/systemd/system/`에 설치합니다.
+gateway/dispatcher는 같은 실행 사용자 home을 사용해야 합니다. watchdog은 재기동 권한을 가진
+기존 root 서비스 구조를 유지합니다. `daemon-reload` 후 설정·smoke를 확인하고 필요한 unit만 enable/start합니다.
 
 ## 설정
 
@@ -169,17 +211,20 @@ nanobot 내장 크론이 `~/.nanobot/workspace/cron/jobs.json`을 읽어 매일 
 cat ~/.nanobot/workspace/cron/jobs.json
 ```
 
-`"to": "123456789"` 형태로 숫자 ID가 치환되어 있어야 합니다. `${TELEGRAM_USER_ID}`가 그대로 남아 있으면 `.env`의 `TELEGRAM_USER_ID`가 비어 있었던 것 — `.env`를 고친 뒤 재 seed:
-
-```bash
-rm ~/.nanobot/workspace/cron/jobs.json
-my-nanobot-rpi doctor
-sudo systemctl restart my-nanobot-rpi
-```
+`"to": "123456789"` 형태로 숫자 ID가 치환되어 있어야 합니다. `${TELEGRAM_USER_ID}`가 남아 있으면
+`.env`의 `TELEGRAM_USER_ID`를 비공개로 확인합니다. 기존 jobs 파일을 삭제해 재생성하면
+사용자 정의 job과 실행 상태를 잃을 수 있으므로 삭제하지 않습니다.
+[공통 백업 절차](development/operations-runbook.md)로 모든 writer를 정지한 뒤 `.env`와
+해당 job 목적지를 비공개로 수정하고, 다른 job·실행 상태가 보존됐는지 확인합니다.
+기동 시 관리 job의 seed 동기화가 있으므로 후보 코드의 동기화 정책과 최종 목적지도 확인한 뒤
+단일 gateway 및 원래 timer 상태로 복귀합니다.
 
 ### 스케줄/메시지 변경
 
-`jobs.json`을 직접 편집하면 됩니다. nanobot이 파일 mtime을 감지해 자동 reload합니다 (서비스 재시작 불필요).
+nanobot은 `jobs.json`의 mtime 변경을 감지해 reload합니다. 다만 관리 뉴스 job의 schedule/payload는
+다음 gateway/doctor의 seed 동기화에서 저장소 템플릿에 맞춰집니다. 직접 수정은 영구 설정으로
+보장되지 않습니다. 변경 전 백업·writer 정지 및 사용자 job/state 보존을 확인하고,
+지속적인 관리 job 변경은 템플릿 변경 범위와 Human 승인을 별도로 정합니다.
 
 ## tracking dispatcher 타이머
 
@@ -221,7 +266,7 @@ htop   # 없으면 sudo apt-get install -y htop
 
 ```bash
 journalctl -u my-nanobot-rpi -n 50 | grep -i "error\|auth\|key"
-cat .env                                # 리포 루트에서 실행
+# .env는 비공개 편집기로 확인하고 값을 로그·채팅에 출력하지 않습니다.
 sudo systemctl restart my-nanobot-rpi    # .env 변경 반영
 ```
 
@@ -235,10 +280,11 @@ ModuleNotFoundError: No module named 'apt_pkg'
 E: Problem executing scripts APT::Update::Post-Invoke-Success ...
 ```
 
-최신 `setup-rpi.sh`는 이 경우 post-update hook을 끄고 자동 재시도합니다. 이미 실패한 장비에서는 최신 변경을 받은 뒤 다시 실행합니다:
+`setup-rpi.sh`는 이 경우 post-update hook을 끄고 자동 재시도합니다.
+최초 설치 실패 장비는 설치 후보 버전을 확인한 뒤 재실행합니다.
+기존 운영 업데이트는 임의 `git pull` 대신 공통 절차의 고정 SHA·백업을 사용합니다:
 
 ```bash
-git pull
 bash deploy/setup-rpi.sh
 ```
 
@@ -254,24 +300,19 @@ sudo apt-get \
 ### 텔레그램 연결 문제
 
 1. `TELEGRAM_USER_ID`가 **숫자**인지 확인 (핸들 불가)
-2. 봇 토큰 유효성 확인:
-   ```bash
-   curl -s https://api.telegram.org/bot<TOKEN>/getMe
-   ```
+2. 봇 토큰 유효성은 승인된 단일 gateway 연결과 실제 응답으로 확인합니다.
+   토큰이 들어간 URL을 셸 명령·로그·공개 보고서에 남기지 않습니다.
 3. `jobs.json`의 `"to"`가 숫자로 치환됐는지 확인
 
 ### 이전에 쌓인 `~/.nanobot/` 설정을 리셋하고 싶을 때
 
-다른 nanobot 프로젝트에서 남긴 MCP 서버나 불필요한 설정(예: yfinance)이 에러를 일으킬 수 있습니다. 통째로 초기화:
-
-```bash
-sudo systemctl stop my-nanobot-rpi
-mv ~/.nanobot ~/.nanobot.bak.$(date +%Y%m%d)
-my-nanobot-rpi doctor                        # 깨끗한 msalt 템플릿으로 재 seed
-sudo systemctl start my-nanobot-rpi
-```
-
-백업(`~/.nanobot.bak.*`)은 며칠 확인 후 `rm -rf`로 삭제.
+다른 프로젝트 설정 때문에 오류가 생겨도 `.nanobot` 전체를 즉시 초기화하지 않습니다.
+이 디렉터리는 설정뿐 아니라 생활 기록 DB·세션·memory·예약 job을 포함합니다.
+[공통 백업·복구 절차](development/operations-runbook.md)에 따라 모든 writer와 두 timer를
+정지하고 일관된 백업·격리 복구를 확인한 뒤, 변경할 설정과 데이터 보존 범위를 정합니다.
+`doctor`는 seed/maintenance를 수행하므로 백업 전에 실행하지 않습니다.
+데이터를 포함한 전체 초기화는 유실 영향과 복원 지점에 대한 별도 Human 승인 후 수행합니다.
+기존 백업은 복구 가능성과 보존 정책을 확인하기 전 삭제하지 않습니다.
 
 ### swap 관련 문제
 

@@ -1,309 +1,231 @@
 # my-nanobot-rpi TRD
 
-> **문서 성격**: 사후 정리 TRD. 시스템의 아키텍처와 컴포넌트별 책임을 기록한다. 코드 시그니처나 확장 가이드는 다루지 않으며, 그 정보는 코드와 [PYTHON_SDK.md](PYTHON_SDK.md)를 참조한다.
->
-> **최종 업데이트**: 2026-04-14
+최종 갱신: 2026-10-05.
+[PRD](msalt-prd.md)의 현재 기능을 코드 기반으로 설명하고 공개 배포의 기술 기준·확장 검토 사항을 정의한다.
+Watch·Review의 명령·테이블·주기는 미구현 제안이며 상세 Issue 승인으로 확정한다.
+실제 운영 서버의 주소·경로·상태·배포 SHA는 운영자별 비공개 기록으로 관리한다.
 
----
+## 1. 시스템과 배포 경계
 
-## 1. 시스템 개요
+RPi 또는 OCI Cloud Instance의 단일 Linux 호스트에서 nanobot 게이트웨이와 msalt를 실행한다.
+nanobot은 Git 서브모듈이며 에이전트·채널·도구·스킬·크론·메모리·dream을 제공한다.
+msalt는 초기화·뉴스·생활 기록/통계·알림과 nanobot 확장 도구를 제공한다.
+Telegram·OpenAI·뉴스 피드·검색 API는 외부 서비스다.
 
-my-nanobot-rpi은 **단일 라즈베리파이 노드**에서 nanobot 프레임워크를 호스트하고, 그 위에 msalt 전용 도메인 모듈(`msalt/`)을 얹은 구조다. 외부와는 텔레그램 봇 API와 OpenAI / RSS 피드로 연결된다.
-
-### 컨텍스트 다이어그램
-
-```
-                 ┌──────────────────────────┐
-                 │      msalt (사용자)      │
-                 │   Telegram 모바일 클라이언트 │
-                 └────────────┬─────────────┘
-                              │ HTTPS (Bot API)
-                              ▼
-   ┌────────────────────────────────────────────────────┐
-   │           Telegram Bot API (api.telegram.org)      │
-   └────────────────────────┬───────────────────────────┘
-                            │ long polling
-                            ▼
-   ┌────────────────────────────────────────────────────┐
-   │   Raspberry Pi 3B+ — systemd: my-nanobot-rpi.service│
-   │   ┌────────────────────────────────────────────┐   │
-   │   │              nanobot core                  │   │
-   │   │  (channels, agent loop, cron, dream, ...)  │   │
-   │   └────────────────┬───────────────────────────┘   │
-   │                    │ skill invocation               │
-   │   ┌────────────────▼───────────────────────────┐   │
-   │   │              msalt 모듈                    │   │
-   │   │  news / tracking / storage / config        │   │
-   │   └─┬──────────┬──────────┬──────────────┬─────┘   │
-   │     │          │          │              │         │
-   │     ▼          ▼          ▼              ▼         │
-   │  SQLite    workspace   logs          ~/.nanobot/    │
-   │  (msalt.db) memory     (journald)    config.json    │
-   └─────┬──────────┬──────────────────────────────────┘
-         │          │
-         ▼          ▼
-   ┌─────────┐ ┌─────────┐
-   │ OpenAI  │ │  RSS    │
-   │  API    │ │ Feeds   │
-   └─────────┘ └─────────┘
+```mermaid
+flowchart TD
+    User["개인 사용자"] <--> Telegram["Telegram Bot API"]
+    LLM["OpenAI API"]
+    Sources["RSS · 공식 기관 피드<br/>Tavily/Brave · HTML/sitemap"]
+    subgraph Host["RPi / OCI · 단일 Linux 호스트"]
+        Boot["systemd 서비스"] --> CLI["msalt CLI · 환경 로드/초기화"]
+        CLI --> Gateway["nanobot 게이트웨이 · 에이전트"]
+        Cron["nanobot 크론<br/>07:00 · 14:00 · 20:00 KST"] --> Gateway
+        Gateway --> Skills["뉴스 · 브리핑 · 생활 기록 스킬"]
+        Skills --> News["news CLI · 수집/검색/브리핑"]
+        Skills --> Tracking["tracking CLI · 항목/기록/집계"]
+        Timer["systemd 타이머 · 30분"] --> Dispatcher["tracking dispatcher"]
+        Dispatcher --> Storage["Storage"]
+        News --> Storage
+        Tracking --> Storage
+        Storage <--> DB[("SQLite msalt.db")]
+        Gateway <--> Workspace["프로필 · 메모리 · 세션 · 크론"]
+        Gateway --> Reply["tracking_reply 도구"]
+        Watchdog["워치독 · 5분"] -.-> Boot
+    end
+    Telegram <--> Gateway
+    Dispatcher --> Telegram
+    Reply --> Telegram
+    Gateway <--> LLM
+    News <--> LLM
+    Sources --> News
 ```
 
-## 2. 아키텍처
+그림은 현재 구현 구조다. Watch·정기 Review는 포함되지 않는다.
 
-### 레이어 구성
+## 2. 컴포넌트 책임
 
-```
-┌─────────────────────────────────────────────────────┐
-│  L4. 사용자 접점 (Telegram channel — nanobot 제공)  │
-├─────────────────────────────────────────────────────┤
-│  L3. 스킬 (msalt/skills/*/SKILL.md)                 │
-│       대화형 진입점 + 크론 진입점. 얇은 라우팅 레이어│
-├─────────────────────────────────────────────────────┤
-│  L2. 도메인 모듈 (msalt/news, msalt/tracking)      │
-│       비즈니스 로직: 수집·요약·분류·집계           │
-├─────────────────────────────────────────────────────┤
-│  L1. 인프라 (msalt/storage.py, msalt/config.py)    │
-│       SQLite I/O, 환경 설정 로드                   │
-├─────────────────────────────────────────────────────┤
-│  L0. 외부 의존성                                   │
-│       nanobot core, OpenAI SDK, feedparser, httpx, │
-│       python-telegram-bot, sqlite3                 │
-└─────────────────────────────────────────────────────┘
-```
+| 코드 | 책임 |
+|------|------|
+| msalt/cli.py | .env·필수 값 점검, 기본 설정 생성, 스킬·크론 동기화, gateway/doctor/news/tracking |
+| config.py | 기본 DB·소스 경로·시간대. 세 브리핑 예약은 cron/jobs.json 기준 |
+| storage.py | 테이블·호환 마이그레이션·조회·upsert·pending/이력 갱신 |
+| news/collector.py | RSS·공식·검색·보완 수집 결합, 경로별 실패 격리, URL dedup |
+| news/briefing.py | 발행 기간·기존 브리핑 제외, 카테고리 요약·링크·생성 이력 |
+| tracking/items.py, records.py | 항목 검증·기본 생성, 기록·집계·7일/30일 코멘트·누락 조회 |
+| tracking/parser.py | 자연어 기록·항목 의도 파서 모듈. 현재 스킬은 에이전트가 값을 결정해 CLI에 전달 |
+| tracking/alcohol.py | 술 프로필·용량·도수·순알코올 환산 |
+| tracking/dispatcher.py | 예약·pending 재알림·묶음 메시지·키보드 |
+| tracking/reply_tool.py | nanobot tool entry point, 저장 후 최종 응답·키보드 전송 |
+| runtime_migration.py | 특정 과거 프로필 기록 백업·아카이브, 기존 기본 context 예산 정비 |
+| responses_compat.py | upstream Responses replay 필드 alias 호환 처리 |
 
-### 호출 방향 원칙
+스킬은 자연어 의도를 CLI/도구로 연결하고 Python 코드가 저장·집계한다.
+설치된 `my-nanobot-rpi`를 실행하며 서비스·스킬에서 임의 시스템 Python으로 venv를 우회하지 않는다.
+nanobot 갱신 시 도구 entry point와 호환 처리가 사용하는 upstream 내부 API를 함께 검증한다.
 
-- **상위 → 하위 단방향**. L3는 L2를, L2는 L1을 호출. 역방향 금지.
-- L2 모듈은 서로 직접 호출하지 않음. 공통 데이터는 L1 (`storage.py`) 경유.
-- nanobot core는 msalt를 모름. msalt가 nanobot의 SKILL 규약과 cron 규약을 따른다.
+## 3. 현재 처리 흐름
 
-### 디렉토리 구조
+### 뉴스
 
-```
-msalt/
-├── config.py              # MsaltConfig 데이터클래스
-├── storage.py             # SQLite Storage 클래스
-├── news/
-│   ├── rss.py             # RssCollector
-│   ├── collector.py       # NewsCollector (오케스트레이터)
-│   ├── briefing.py        # BriefingGenerator
-│   ├── cli.py             # python -m msalt.news 엔트리포인트
-│   ├── sources.json       # RSS 소스 목록
-│   └── __main__.py
-├── tracking/
-│   ├── items.py           # TrackedItemManager
-│   ├── records.py         # RecordManager
-│   ├── parser.py          # NaturalLanguageParser (LLM)
-│   ├── dispatcher.py      # 30분 디스패처
-│   ├── cli.py             # python -m msalt.tracking 엔트리포인트
-│   └── __main__.py
-├── skills/
-│   ├── news/SKILL.md
-│   ├── news-briefing/SKILL.md
-│   └── tracking/SKILL.md
-├── workspace/
-│   ├── SOUL.md            # 봇 페르소나 템플릿
-│   └── USER.md            # 사용자 정보 템플릿
-└── nanobot-config.example.json
-```
+1. nanobot 크론/사용자 요청 → news/news-briefing 스킬 → 뉴스 CLI.
+2. Storage 초기화와 수집. briefing 명령 자체도 수집한다.
+3. RSS·공식·검색·HTML/sitemap 결과를 정규화해 URL 기준 저장.
+4. 발행 시각·브리핑 이력으로 선택 후 국내/해외/정책 요약·근거 링크 출력.
+5. 에이전트/크론 채널에서 Telegram 전달.
 
-## 3. 컴포넌트 책임
+news_briefed_articles는 생성 시 갱신되며 수신 완료와 원자적으로 연결된 전달 이력이 아니다.
+발송 실패 뒤 누락·재전송 정책은 [로드맵 단계 1](implementation-roadmap.md)에서 보완한다.
+검색은 저장 기사 전체의 제목·요약을 비교하므로 기간·개수 제한은 추가 설계 대상이다.
 
-각 모듈이 무엇을 책임지는지 한 문단씩. 시그니처는 코드 직접 참조.
+### 기록과 후속 응답
 
-### 3.1 인프라 레이어 (L1)
+1. 에이전트가 tracking 스킬과 입력/직전 질문으로 항목·대상 날짜·값 결정.
+2. record CLI가 날짜별 upsert. 음주는 순알코올 g과 구조화 JSON 저장.
+3. 저장 결과·7일/30일 코멘트·FOLLOW_UP_JSON 출력.
+4. 성공 후 tracking_reply로 응답·후속 질문·키보드 전송. 누락이 없으면 키보드 제거.
 
-**`msalt/config.py` — MsaltConfig**
-모든 msalt 모듈이 공유하는 설정값을 단일 데이터클래스로 보관한다. 타임존(`Asia/Seoul`), SQLite 경로(`~/.nanobot/workspace/msalt.db`), 브리핑 시각(07:00, 14:00, 20:00) 등을 노출한다. 환경별 분기는 없다 — 1인용·단일 환경 가정.
+CLI에 parse-record 명령은 없다. 파서 모듈이 있다고 모든 Telegram 입력이 그 모듈로 처리되는 것은 아니다.
+묶음 답변은 항목별 record 호출이며 여러 항목 저장 전체가 하나의 원자적 트랜잭션은 아니다.
 
-**`msalt/storage.py` — Storage**
-SQLite 3개 테이블(`news_articles`, `tracked_items`, `records`)에 대한 CRUD를 담당한다. 모든 도메인 모듈은 이 클래스만을 통해 DB에 접근한다. 트랜잭션·커넥션 관리·`initialize()`(테이블 생성) 책임. 비즈니스 로직(통계·요약·디스패처)은 일절 포함하지 않는 순수 I/O 레이어.
+### 예약과 재알림
 
-### 3.2 뉴스 도메인 (L2: `msalt/news/`)
+systemd 타이머가 매시 00/30분 dispatcher를 호출한다.
+KST 30분 윈도우와 기록·pending을 읽어 예약 질문 또는 09:00·14:00·20:00 재알림을 구성한다.
+pending 대상 날짜·마지막 질문 시각으로 후속 처리를 제한하고 여러 대상을 한 메시지로 보낸다.
+응답·다음 예약 슬롯에 따른 pending 정리, 발송·저장 순서와 재시작 경계는 독립 테스트 대상이다.
 
-**`rss.py` — RssCollector**
-`sources.json`의 RSS 피드 목록을 읽고 `feedparser`로 파싱한다. 피드별로 최근 N개 기사 제목·URL·요약·게시일을 추출해 표준 dict 리스트로 반환한다. 네트워크 에러는 소스 단위로 격리(한 피드가 죽어도 다른 피드는 계속).
+## 4. 현재 데이터 모델
 
-**`collector.py` — NewsCollector**
-RSS 수집 결과를 `Storage.insert_article`로 저장한다. URL UNIQUE 제약으로 중복 자동 차단. 수집 자체만 책임지고 요약은 하지 않는다.
+SQLite 테이블은 **네 개**다. 상세 컬럼·마이그레이션은 [Storage 코드](../msalt/storage.py)를 기준으로 한다.
 
-**`briefing.py` — BriefingGenerator**
-DB에 누적된 최근 기사를 읽어 OpenAI GPT로 요약 브리핑 텍스트를 생성한다. 카테고리(국내/해외)별로 묶고, 카테고리당 3~5개 항목을 뽑아 한국어 헤드라인 + 한 줄 요약 형태로 출력한다. URL 기반 dedup은 이 시점에도 한 번 더 적용.
+| 테이블 | 주요 필드 | 제약·의미 |
+|--------|-----------|-----------|
+| news_articles | id, source, title, url, summary, category, collected_at, published_at | url UNIQUE, domestic/international/policy, 수집·발행 시각 구분 |
+| news_briefed_articles | article_url, briefing_label, briefed_at | article_url PK, 브리핑 생성 이력 |
+| tracked_items | id, name, schema, unit, schedule_time, frequency, created_at | name UNIQUE, 현재 기본 frequency daily |
+| tracked_items 알림 상태 | last_missed_asked_date, pending_since, pending_recorded_for, last_asked_at | 과거 호환 필드·pending·대상 날짜·질문 시각 |
+| records | id, item_id, recorded_for, recorded_at, value_text, value_num, value_bool, value_json, raw_input | UNIQUE(item_id, recorded_for), item FK ON DELETE CASCADE |
 
-**`cli.py` — main**
-`python -m msalt.news <command>` 엔트리포인트. 서브커맨드: `collect`(수집만), `briefing`(수집 후 요약 생성), `search <keyword>`(DB 검색). 크론 트리거와 사용자 명령 양쪽에서 공유.
+- duration은 분, quantity는 항목 unit 단위이며 음주 기본 unit은 g다.
+- value_json은 TEXT 직렬화 데이터, raw_input은 원문이다.
+- recorded_for는 사용자 대상 날짜, recorded_at은 저장 시각이다. 같은 항목·날짜는 갱신한다.
+- `_connect()`에서 foreign_keys를 켜며 항목 삭제는 관련 기록 삭제로 연결된다.
+- 뉴스 발행 시각은 UTC 정규화, 예약·대상 날짜는 KST 기준이다. 시스템 시각 기반 출력·기본값도 있어 환경 시간대와 경계를 검증한다.
+- boolean 통계는 저장된 기록 수가 분모다. 누락 날짜를 미수행으로 간주하지 않는다.
 
-**`sources.json`**
-RSS 피드 5개(한국경제·매일경제·경향신문 경제·BBC Business·CNBC)의 name/URL/category 정의. 코드 변경 없이 소스 추가·제거 가능.
+initialize()는 CREATE IF NOT EXISTS와 기존 컬럼 확인 후 ALTER ADD를 적용한다.
+새 마이그레이션은 데이터 보존·재실행·구버전 호환/복원 가능성을 검증한다. 단순 코드 checkout을 DB 롤백으로 가정하지 않는다.
 
-### 3.3 트래킹 도메인 (L2: `msalt/tracking/`)
+## 5. 인터페이스와 설정
 
-**`items.py` — TrackedItemManager**
-추적 항목 CRUD와 검증, 빈 DB일 때 기본 시드(수면/음주/영어공부) 삽입을 책임진다. schema(freetext/duration/quantity/boolean)·schedule_time(HH:MM)·unit 일관성 검사도 여기서.
+| 진입점 | 현재 인터페이스 |
+|--------|-----------------|
+| 기동 | my-nanobot-rpi 또는 gateway |
+| 진단 | doctor |
+| 뉴스 | news collect, news briefing morning/afternoon/evening, news search 키워드 |
+| 항목 | tracking add/list/delete |
+| 기록·집계 | tracking record, tracking summary 이름 --days N, tracking dispatch |
+| 확장 도구 | tracking_reply, pyproject.toml의 nanobot.tools entry point |
 
-**`records.py` — RecordManager**
-기록 upsert(같은 날짜 덮어쓰기)와 schema별 통계 포맷팅. duration → 평균 분, quantity → 합계·평균, boolean → 수행률(%), freetext → 최근 N건 나열.
+record는 --date/--raw와 --text/--num/--bool/--no-bool/--json으로 명시적인 값을 전달한다.
+FOLLOW_UP_JSON은 내부 제어 정보이며 사용자에게 그대로 표시하지 않는다.
 
-**`parser.py` — NaturalLanguageParser**
-gpt-5-mini 단발 호출로 두 가지를 처리: (1) 기록 입력 자연어 → ParsedRecord(item·날짜·값·신뢰도), (2) 항목 추가 자연어 → ParsedItemIntent(name·schema·unit·schedule_time). LLM 응답 파싱 실패 시 기록은 confidence=0 반환, 항목 의도는 ValueError.
+| 설정 | 역할 |
+|------|------|
+| 프로젝트 .env | 필수 OpenAI/Telegram 값, 선택 Tavily/Brave 키 |
+| nanobot-config.example.json | 대화 모델·provider·workspace·채널·도구 템플릿 |
+| ~/.nanobot/config.json | 실행 사용자 설정·환경 변수 치환 |
+| news/sources.json | 일반 RSS 7·공식 피드 3·검색 4·보완 4개의 현재 설정 |
+| workspace/cron/jobs.json | 하루 세 브리핑 크론 템플릿 |
 
-**`dispatcher.py` — Dispatcher**
-30분 윈도우 단위로 도는 검출 로직. (1) 직전 30분 슬롯에 schedule_time이 든 항목 → 질문 메시지, (2) 슬롯이 이미 지났는데 오늘 records가 없는 항목 → 누락 알림. 같은 항목이 양쪽에 잡히면 (1) 우선. Telegram 발송 함수는 의존성 주입.
+대화 모델은 nanobot 설정, 뉴스 요약 기본 모델은 briefing.py로 각각 정한다.
+Responses와 Chat Completions 경로를 구분해 모델·SDK 호환을 검증한다.
+현재 msalt 기본 DB는 실행 사용자의 ~/.nanobot/workspace/msalt.db다.
+nanobot workspace 변경만으로 모든 msalt CLI DB 경로가 자동 변경된다고 가정하지 않는다.
+임의 경로 지원을 확대한다면 gateway·스킬·CLI·timer가 동일 설정을 쓰도록 별도 설계한다.
 
-**`cli.py` — main**
-`python -m msalt.tracking <cmd>` 엔트리. `dispatch`(systemd timer), `add`/`delete`/`list`/`record`/`summary`(디버깅·시드).
+## 6. RPi/OCI 공통 배포와 운영
 
-### 3.4 스킬 레이어 (L3: `msalt/skills/`)
+프로젝트 패키지는 Python 3.11+를 선언하고 nanobot 서브모듈을 별도로 설치한다.
+실제 호환은 선택한 nanobot revision·의존성과 RPi 아키텍처·OS에서 확인한다.
+Linux + systemd를 기본으로 안내하며 Dockerfile도 제공한다. Docker 이미지에 systemd 알림 타이머가 자동 구성되는 것은 아니다.
 
-스킬 파일은 nanobot의 `SKILL.md` 규약(YAML frontmatter + Markdown 본문)을 따른다. 본문은 LLM에게 "이 도구를 언제·어떻게 호출할지"를 설명하고, 실행은 내부적으로 `python -m msalt.news` 또는 `python -m msalt.tracking` CLI를 호출한다.
+```text
+project-root/                 # 운영자가 선택한 설치 위치
+├── .env                      # 비밀값, Git 제외
+├── .venv/
+├── nanobot/                  # 서브모듈
+└── msalt/                    # 앱·템플릿
 
-**`news/SKILL.md`** — 대화형 뉴스 스킬. 사용자가 "최근 뉴스 보여줘", "삼성전자 관련 기사 찾아줘" 같은 자유 질의를 던졌을 때 LLM이 이 스킬을 호출.
-
-**`news-briefing/SKILL.md`** — 크론 스케줄 전용 스킬. `metadata: {"always": false}`로 일반 대화에서는 노출되지 않고, 07:00/14:00/20:00 cron 트리거에서만 호출된다.
-
-**`tracking/SKILL.md`** — 추적 항목 통합 스킬. 사용자 의도(기록·항목 추가/삭제·조회·통계)에 따라 적절한 tracking 서브커맨드로 라우팅.
-
-### 3.5 워크스페이스 템플릿 (`msalt/workspace/`)
-
-**`SOUL.md`** — 봇 페르소나. 한국어 반말 톤, 경제 브리핑은 사실만, 생활 기록은 비판 없이 수용 등의 행동 원칙이 정의돼 있다. nanobot 첫 실행 시 `~/.nanobot/workspace/SOUL.md`로 복사돼 시스템 프롬프트에 주입된다.
-
-**`USER.md`** — 사용자 정보 템플릿. 위치(한국)·언어(한국어)·관심사(경제/금융)·선호 브리핑 시간 등이 사전 기재돼 있다. 이후 dream 시스템이 대화에서 추출한 사실을 자동 추가.
-
-## 4. 데이터 모델
-
-SQLite 단일 파일(`~/.nanobot/workspace/msalt.db`)에 3개 테이블.
-
-### `news_articles` — 수집된 뉴스/영상 원본
-
-| 컬럼 | 타입 | 용도 |
-|------|------|------|
-| `id` | INTEGER PK | 자동 증가 |
-| `source` | TEXT | 소스 식별자 (예: `한국경제`, `BBC Business`) |
-| `title` | TEXT | 기사 제목 |
-| `url` | TEXT UNIQUE | 원문 URL — UNIQUE 제약으로 중복 자동 차단 |
-| `summary` | TEXT | RSS의 description |
-| `category` | TEXT | `domestic`/`international` |
-| `collected_at` | TEXT | 수집 시각 (`datetime('now')`) |
-
-### `tracked_items` — 사용자 정의 추적 항목
-
-| 컬럼 | 타입 | 용도 |
-|------|------|------|
-| `id` | INTEGER PK | 자동 증가 |
-| `name` | TEXT UNIQUE | 항목명 (예: `수면`, `음주`, `영어공부`) |
-| `schema` | TEXT | `freetext` / `duration` / `quantity` / `boolean` |
-| `unit` | TEXT | quantity일 때 단위 (예: `잔`), 그 외 NULL |
-| `schedule_time` | TEXT | 능동 질문 시각 (`HH:MM`) |
-| `frequency` | TEXT | 기본 `daily` (현재 daily만 사용) |
-| `created_at` | TEXT | 등록 시각 |
-
-### `records` — 항목별 기록
-
-| 컬럼 | 타입 | 용도 |
-|------|------|------|
-| `id` | INTEGER PK | 자동 증가 |
-| `item_id` | INTEGER FK → tracked_items.id ON DELETE CASCADE | 항목 참조 |
-| `recorded_for` | TEXT | 사용자 기준 날짜 (`YYYY-MM-DD`) |
-| `recorded_at` | TEXT | 시스템 기록 시각 (`datetime('now')`) |
-| `value_text` | TEXT | freetext 값 |
-| `value_num` | REAL | duration(분), quantity(양) 값 |
-| `value_bool` | INTEGER | boolean 값 (0/1) |
-| `raw_input` | TEXT | 사용자 원본 입력 (감사용) |
-| UNIQUE `(item_id, recorded_for)` | | 같은 날짜 재입력 시 덮어쓰기 |
-
-## 5. 외부 의존성
-
-| 의존성 | 용도 | 호출 위치 | 인증 |
-|--------|------|-----------|------|
-| **nanobot core** | 에이전트 루프, 채널, 크론, 메모리, dream | 호스트 프로세스 | — |
-| **OpenAI API** (gpt-5-mini) | 브리핑 요약, 대화 응답 | `briefing.py`, nanobot agent loop | `OPENAI_API_KEY` |
-| **Telegram Bot API** | 사용자 인터페이스 | nanobot telegram channel | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID` (allowlist) |
-| **RSS 피드** (5개) | 한국·해외 뉴스 수집 | `rss.py` | 없음 (공개) |
-| **feedparser** | RSS XML 파싱 | `rss.py` | — |
-| **httpx** | tracking dispatcher의 Telegram 발송 | `tracking/cli.py` | — |
-| **python-telegram-bot** | Telegram 통신 (nanobot 내부) | nanobot | — |
-| **sqlite3** | DB I/O | `storage.py` | — (Python 표준) |
-
-비밀값은 모두 `.env` 단일 파일에 정의하고, nanobot config(`config.json`)는 `${VAR}` 치환만 사용한다.
-
-## 6. 배포 토폴로지
-
-### 단일 노드 구성
-
-```
-Raspberry Pi 3B+ (1GB RAM, 1GB swap)
-└── systemd: my-nanobot-rpi.service
-    └── my-nanobot-rpi (→ nanobot gateway)
-        ├── Telegram channel (long polling)
-        ├── Cron service
-        │   ├── 07:00 KST → news-briefing skill
-        │   └── 19:00 KST → news-briefing skill
-        ├── Agent loop (gpt-5-mini)
-        ├── Memory & Dream (12h cycle)
-        └── msalt 도메인 모듈 (skill 호출 시 활성화)
-        ├── (외부) systemd timer: msalt-tracking-dispatch.timer (30min)
-        │       └── python -m msalt.tracking dispatch → Telegram 직접 발송
-
-파일 시스템:
-~/.nanobot/
-├── config.json          # nanobot 설정 (.env 치환)
+~/.nanobot/                   # 서비스 실행 사용자 기준 기본 위치
+├── config.json
 └── workspace/
-    ├── SOUL.md          # 봇 페르소나
-    ├── USER.md          # 사용자 정보
-    ├── memory/
-    │   ├── MEMORY.md    # dream 자동 관리 장기 기억
-    │   └── history.jsonl
-    └── msalt.db         # SQLite (뉴스 + 추적 항목/기록)
+    ├── SOUL.md / USER.md
+    ├── skills/ / cron/
+    ├── memory/ / sessions/
+    └── msalt.db
 ```
 
-### 시작 절차
+- gateway service는 부팅 기동·실패 재시작, tracking timer는 30분 실행을 담당한다.
+- watchdog은 5분마다 Telegram 연결 타임아웃 로그를 확인한다. 모든 장애나 무중단을 보장하지 않는다.
+- unit 사용자·WorkingDirectory·실행 파일·환경 파일은 환경에 맞게 지정한다. /home/pi는 예시다.
+- setup-rpi.sh는 사용자·경로를 탐지하고 RPi OS/Ubuntu swap 방식을 구분한다. Python 3.11 설치는 OS 패키지 가용성을 확인한다.
+- 저메모리 환경의 swap·메모리·디스크·외부 API 연결과 실제 측정값·미검증 한계를 기록한다.
+- SQLite·설정·워크스페이스의 일관된 백업/복구를 검증한다. 쓰기 중 DB 단순 복사는 일관된 백업으로 가정하지 않는다.
+- 후보 대상은 운영자가 선택한 RPi/OCI다. 검증·운영 봇과 DB 공유로 중복 polling/알림이 발생하지 않게 한다.
+- 공개 보고서는 플랫폼·검증 버전·결과를 남기고 서버 주소·개인 경로·설정 원본은 비공개 기록에 둔다.
 
-1. systemd가 부팅 시 서비스를 시작
-2. nanobot이 `config.json` 로드 → `.env` 치환
-3. workspace 초기화 (`SOUL.md`/`USER.md`는 사전 복사된 상태)
-4. Telegram long polling 시작
-5. cron 등록 (브리핑 2회/일)
-6. 사용자 메시지 또는 cron 트리거 대기
+## 7. 실패·관찰성·접근 기준
 
-### 정상 운영 가정
+| 영역 | 현재 동작과 검증할 위험 |
+|------|------------------------|
+| 수집 | 경로별 예외 로그·나머지 수집 진행; 원문·발행 시각 누락과 소스 장애 |
+| 브리핑 | 생성 이력·전송 성공 분리; 요약/전송 실패 뒤 누락·재시도 |
+| 기록 | CLI 성공 후 완료 응답; 부분 저장·날짜 해석·잘못된 JSON |
+| 알림 | pending·질문 상태 사용; 중복·재시작·발송/저장 불일치 |
+| 진단 | env·config·workspace·cron·소스 점검; 네트워크 경고가 항상 실패 exit를 뜻하지는 않음 |
+| upstream | 도구 API·Responses 호환 변경; 갱신 시 도구·replay 회귀 |
 
-- 인터넷 연결 24시간 유지 (RSS·OpenAI·Telegram 호출 필수)
-- RPi 전원·SD카드 안정성 (UPS·백업은 운영 정책)
-- swap 1GB 활성화 (OOM 방지)
-- 로그는 journald로 회수 (`journalctl -u my-nanobot-rpi`)
+관찰 대상은 수집 수·실패, 생성/수신, 기록 성공, 질문 중복·누락, API 오류·사용량, 메모리·디스크다.
+없는 수집기를 있는 것으로 설명하지 않는다. 관찰성 추가는 안정화 Issue에서 수행한다.
+LLM의 CLI 실행 능력을 고려해 Telegram allowlist·실행 사용자 권한을 검토한다.
+토큰·개인 원문·전체 환경을 로그·공개 Issue/PR에 출력하지 않는다. 백업에도 같은 접근 기준을 적용한다.
 
-## 7. 테스트 전략
+## 8. Watch·Review 확장 기준 (미구현)
 
-### 구성
+현재 Watch/Review 전용 테이블·CLI·정기 작업은 없다. 아래 계약은 상세 Issue에서 확정한다.
 
-- **프레임워크**: pytest
-- **위치**: `tests/msalt/{news,tracking}/test_*.py`
-- **import 모드**: `--import-mode=importlib` — `news/cli.py`와 `tracking/cli.py`의 basename 충돌 회피
-- **`__init__.py` 정책**: 테스트 디렉토리에는 두지 않음 (프로젝트 컨벤션)
-- **현재 테스트 수**: 69개 (전 모듈 통과)
+| 확장 | 제안 구조 | 확정할 사항 |
+|------|-----------|-------------|
+| Watch 관리 | msalt/watch + Storage + CLI/스킬 | 조건·활성 상태·CRUD·마이그레이션 |
+| Watch 평가 | 새 기사 → 후보 필터 → 필요한 LLM 평가 | 새 기사 판정·최초 등록·비용·재처리 |
+| Watch 알림 | 평가 → 대기/발송 이력 → Telegram | 중복 키·재시도·빈도·중지·동시 실행 |
+| 생활 Review | records 집계 → 보고 → 수동/정기 전달 | 기간·누락 분모·전주 비교·재생성/실패 |
+| 통합 Review | 생활·Watch·뉴스 섹션 → 하나의 보고 | 부분 실패·링크·길이·중복 예약 |
 
-### 모킹 정책
+Watch에는 브리핑 사이의 독립 수집/확인 주기가 필요하다. 브리핑 이력을 Watch 전달 상태로 재사용하지 않는다.
+평가·알림 실패를 기존 기능과 격리하고 재시작·동시 실행을 검증한다.
+발송 후 상태 저장 실패 등의 불확실 결과를 다루며 무조건 exactly-once 전달을 보장하지 않는다.
+Review는 결정적인 집계를 먼저 수행하고 필요한 설명만 LLM으로 보완한다.
+테이블·도구명·스케줄·threshold를 이 문서에서 승인된 인터페이스로 고정하지 않는다.
 
-- **외부 API (OpenAI/RSS)**: 모두 모킹. 실제 RSS 호출은 `python -m msalt.news.smoke`로 수동 수행.
-- **SQLite**: 임시 파일 DB(`tmp_path`)로 실제 동작 검증 — 모킹하지 않음.
-- **시간**: `freezegun` 또는 인자 주입으로 제어.
+## 9. 검증과 개발 완료
 
-### 커버리지 우선순위
+기본 명령은 `python -m pytest tests/msalt/`다. 설치는 `pip install -e ./nanobot`, `pip install -e ".[dev]"`를 사용한다.
+기존 CI는 Python 3.11/3.12, main 대상 PR/push에서 테스트한다. Linux CI만으로 ARM/RPi 배포·실사용을 대체하지 않는다.
 
-1. `tracking/parser.py` — LLM 응답 파싱 견고성 (실패 시 confidence=0)
-2. `storage.py` — DB 스키마·UNIQUE 제약·CASCADE·upsert 동작
-3. `tracking/dispatcher.py` — 30분 윈도우 경계, scheduled vs missed 우선순위
-4. `briefing.py` — dedup 로직, 카테고리 그룹핑
-5. CLI 엔트리포인트 — argparse 인자 처리
+- 임시 SQLite에서 생성·마이그레이션·UNIQUE·CASCADE·upsert·pending 검증.
+- 재현 가능한 외부 API 모킹과 승인된 환경의 별도 smoke.
+- KST/UTC·날짜/기간 경계·재시작·중복·단답/부분 답변과 실제 Telegram 흐름 확인.
+- 응답 도구·런타임 정비·Responses 호환 회귀 포함.
+- 검증 SHA·명령·종료 코드·AC 근거·미검증 환경 기록. 고정 테스트 수나 과거 PASS를 현재 결과로 쓰지 않음.
+- Human 설계 승인 → 구현 → 독립 Tests/Review PASS → PR → 후보 배포·실사용 → Human 수용 → Merge.
 
----
+## 관련 문서
 
-## 부록: 관련 문서
-
-- [PRD (제품 요구사항)](msalt-prd.md)
-- [설정 가이드](msalt-setup.md)
-- [RPi 배포 가이드](msalt-rpi-deploy.md)
-- [원본 설계 문서](superpowers/specs/2026-04-12-my-nanobot-rpi-design.md)
-- [구현 계획](superpowers/plans/2026-04-12-my-nanobot-rpi.md)
-- [nanobot SDK 참조](PYTHON_SDK.md)
-- [nanobot 메모리 시스템](MEMORY.md)
+- [PRD](msalt-prd.md) · [프로젝트 방향](project-direction.md) · [구현 로드맵](implementation-roadmap.md)
+- [설정](msalt-setup.md) · [RPi/OCI 배포](msalt-rpi-deploy.md)
+- [뉴스 파이프라인](news-briefing-pipeline.md) · [생활 기록 파이프라인](lifestyle-tracking-pipeline.md)
+- [개발 워크플로우](development/agentic-workflow.md)
+- [초기 설계 기록](superpowers/specs/2026-04-12-msalt-nanobot-design.md)
