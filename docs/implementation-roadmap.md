@@ -64,6 +64,12 @@ RPi/OCI 모두에 적용 가능한 절차와 환경 차이를 확인하고, 실�
 
 **Issue 후보:** `R0 운영 기준·백업·후보 배포 절차 확립`. 보드 설정은 개발 환경 준비 작업으로 별도 추적한다.
 
+진행 기록(2026-10-05): [R0 Issue #2](https://github.com/msaltnet/my-nanobot-rpi/issues/2)에
+문서 범위 설계와 Human 승인 근거를 기록했다. [공통 운영 절차](development/operations-runbook.md)와
+[비공개 운영 기록 양식](development/private-operations-record-template.md)을 준비했다.
+Projects 상태·자동화는 권한 부족으로 미확인이며, RPi/OCI 실제 설치·기동·백업/복구·후보 배포는
+미수행이다. 따라서 위 체크리스트와 0단계 완료 상태는 그대로 유지한다.
+
 ## 단계 1. 기존 뉴스·생활 기록 안정화
 
 **목적:** 확장 전에 기존 비서의 기본 경험을 검증하고, 발견한 문제만 수정한다.
