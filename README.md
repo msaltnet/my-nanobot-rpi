@@ -46,6 +46,7 @@ nanobot 프레임워크를 기반으로 RPi / OCI Cloud Instance에서 구동되
 - 항목별 예약 시각에 질문하고, 미응답 항목은 09:00·14:00·20:00에 재알림
 - 텔레그램 답변 키보드와 기록 후 누락 항목에 대한 후속 질문 제공
 - 음주량을 순알코올 g으로 환산하고, 항목별 평균·합계·수행률 조회
+- 기록 직후 최근 7일·30일 데이터를 바탕으로 생활 패턴 코멘트 제공
 
 ## 인프라와 아키텍처
 
@@ -62,10 +63,11 @@ nanobot은 텔레그램 대화, 에이전트 루프, 스킬 실행, 뉴스 브�
 | 메모리 | 1GB RAM | 1GB RAM (OS 인식 약 956MiB) |
 | Swap | 1GB 권장 | 1GiB 구성 |
 | 저장소 | microSD | 루트 파일시스템 약 45GiB |
-| OS | Raspberry Pi OS Lite (64-bit 권장) | Ubuntu 24.04.3 LTS |
+| OS | Ubuntu 24.04.3 LTS | Ubuntu 24.04.3 LTS |
 | 프로세스 관리 | systemd 서비스·타이머 | systemd 서비스·타이머 |
 
 OCI 사양은 2026-10-05 기준 운영 서버와 인스턴스 메타데이터에서 확인한 값이다.
+위 OCI 사양은 유지관리자의 운영 사례이며 필수 배포 사양이 아니다. 각 사용자는 자신의 RPi 또는 OCI 호스트에 설치할 수 있다.
 두 환경은 동일한 앱 코드와 단일 노드 아키텍처를 사용한다.
 
 ### 아키텍처
@@ -127,12 +129,13 @@ flowchart TD
 ```text
 my-nanobot-rpi/
 ├── README.md                       # 프로젝트 소개와 시작 방법
+├── AGENTS.md                       # Issue·승인·Agent 검증·배포·병합 규칙
 ├── pyproject.toml                  # Python 패키지·의존성·CLI·도구 등록
 ├── .env.example                    # API 키·텔레그램 환경 변수 예시
 ├── .gitmodules                     # nanobot 서브모듈 설정
 ├── .gitignore                      # 비밀값·캐시 등 Git 제외 설정
 ├── Dockerfile                      # 컨테이너 이미지 빌드와 게이트웨이 실행
-├── .github/workflows/ci.yml         # Python 3.11/3.12 테스트 CI
+├── .github/                        # Issue·PR 템플릿과 Python 테스트 CI
 ├── nanobot/                        # 에이전트·채널·크론·메모리 프레임워크
 ├── msalt/                          # 개인 비서 기능을 구현하는 Python 패키지
 │   ├── cli.py                      # gateway/doctor/news/tracking 엔트리포인트
@@ -169,6 +172,7 @@ my-nanobot-rpi/
 │       └── cron/jobs.json          # 하루 3회 브리핑 크론 템플릿
 ├── deploy/                         # RPi/OCI 설치 스크립트·systemd 서비스와 타이머
 ├── docs/                           # 설정·배포·요구사항·아키텍처·파이프라인 문서
+│   ├── development/                # 개발 워크플로우·역할별 프롬프트·검수 기록
 │   ├── superpowers/                # 기능별 설계와 구현 계획
 │   └── marketing/                  # 소개 영상 캠페인·스토리보드
 ├── tests/msalt/                    # 앱·뉴스·생활 기록 테스트
@@ -225,12 +229,27 @@ my-nanobot-rpi news briefing morning
 my-nanobot-rpi news search 금리
 ```
 
-현재 OCI 운영 대상과 라즈베리파이 설치 절차는 [배포 가이드](docs/msalt-rpi-deploy.md)를 참고한다.
+RPi/OCI 설치와 서비스 설정은 [배포 가이드](docs/msalt-rpi-deploy.md)를 참고한다. 사용자명·설치 경로는 자신의 환경에 맞게 지정한다.
+
+## 프로젝트 방향과 개발 워크플로우
+
+경제 뉴스와 생활 기록을 바탕으로, 중요한 변화를 먼저 알려주고 누적 기록을 돌아보도록 돕는 개인 비서로 발전시킨다.
+관심 조건 기반 Watch와 주기적 Review는 확장 후보이며, 현재 기능과 구분해 [프로젝트 방향](docs/project-direction.md)에 정리했다.
+
+개발은 `Open → Planning → Ready for Implementation` 세 Issue 상태로 관리한다.
+Human이 Issue 설계를 승인하면 Agent가 구현·독립 테스트·리뷰를 수행하고 PR을 만든다.
+후보 배포와 Human 실사용·PR 검토를 거쳐 최종 수용 후 Merge한다.
+
+- [개발 워크플로우와 단계별 진입 조건](docs/development/agentic-workflow.md)
+- [단계별 구현 로드맵](docs/implementation-roadmap.md)
+- [역할별 작업 시작 프롬프트](docs/development/agent-prompts.md)
+- [GitHub Projects 설정과 적용 상태](docs/development/github-project-setup.md)
 
 ## 문서
 
 - [설정 가이드](docs/msalt-setup.md)
-- [RPi 배포 가이드](docs/msalt-rpi-deploy.md)
+- [주요 기능과 프로젝트 방향](docs/project-direction.md)
+- [RPi / OCI 배포 가이드](docs/msalt-rpi-deploy.md)
 - [제품 요구사항](docs/msalt-prd.md)
 - [기술 설계](docs/msalt-trd.md)
 - [뉴스 브리핑 파이프라인](docs/news-briefing-pipeline.md)

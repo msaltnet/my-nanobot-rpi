@@ -1,32 +1,35 @@
-# my-nanobot-rpi 라즈베리파이 배포 가이드
+# my-nanobot-rpi RPi / OCI 배포 가이드
 
-## 현재 운영 대상
+## 지원 환경과 설치 경로
 
-현재 운영 서비스는 Raspberry Pi가 아니라 OCI Ubuntu 인스턴스에서 실행한다.
+이 프로젝트는 Raspberry Pi와 OCI Cloud Instance의 단일 Linux 호스트에서 실행할 수 있다.
+운영자는 자신의 장비, 로그인 사용자, 저장소 설치 위치와 연결 방법을 선택한다.
+특정 SSH 별칭·호스트명·계정을 사용해야 하는 것은 아니다.
 
-| 항목 | 값 |
-|------|----|
-| SSH alias | `msalt-oci` |
-| 호스트명 | `instance-20251105-0003` |
-| 사용자 | `ubuntu` |
-| 저장소 | `/home/ubuntu/my-nanobot-rpi` |
-| systemd 서비스 | `my-nanobot-rpi` |
-| tracking timer | `msalt-tracking-dispatch.timer` |
+| 항목 | RPi 예시 | OCI 예시 |
+|------|----------|----------|
+| 장비 | Raspberry Pi 3B+ | Linux Cloud Instance |
+| OS | Raspberry Pi OS / Ubuntu | Ubuntu |
+| 사용자·저장소 위치 | 운영자가 지정 | 운영자가 지정 |
+| 프로세스 관리 | systemd | systemd |
 
-운영 서버 접속과 기본 상태 확인:
+설치 후 공통 상태 확인:
 
 ```bash
-ssh msalt-oci
-cd /home/ubuntu/my-nanobot-rpi
 systemctl is-active my-nanobot-rpi
+systemctl list-timers msalt-tracking-dispatch.timer
 ```
 
-이 문서의 Raspberry Pi 설치 절차는 신규 장비 설치용으로 유지한다. 현재 운영 배포와 점검은 위 OCI 대상에서 수행한다.
+아래 `/home/pi`와 `pi`는 설치 예시다. OCI 등 다른 환경에서는 실제 사용자와 설치 경로를 사용한다.
+`deploy/setup-rpi.sh`는 실행한 저장소 위치와 사용자에 맞춰 서비스 설정을 치환한다.
+설정·워크스페이스의 기본 위치는 실행 사용자의 `~/.nanobot/`이므로 설치 및 서비스 실행 사용자를 일치시킨다.
+실제 서버 주소·코드 버전·설치 경로·서비스 상태·백업 위치는 각 운영자의 비공개 운영 기록에 남긴다.
 
 ## 요구사항
 
-- Raspberry Pi 3B+ (1GB RAM)
-- Raspberry Pi OS Lite (64-bit 권장)
+- Raspberry Pi 또는 OCI Cloud Instance의 Linux 호스트
+- RPi 예시: Raspberry Pi 3B+ (1GB RAM), Raspberry Pi OS Lite / Ubuntu
+- OCI 예시: Ubuntu Linux 인스턴스
 - Python 3.11+
 - 인터넷 연결
 - 시스템 시간대 `Asia/Seoul` 권장 (`sudo timedatectl set-timezone Asia/Seoul`)
