@@ -7,7 +7,7 @@ def test_default_config():
     config = MsaltConfig()
     assert config.timezone == "Asia/Seoul"
     assert config.briefing_morning == "07:00"
-    assert config.briefing_evening == "19:00"
+    assert config.briefing_evening == "20:00"
 
 
 def test_default_db_path_is_in_nanobot_home():
