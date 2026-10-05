@@ -10,7 +10,7 @@
 Issue #123을 Planning해줘. AGENTS.md와 docs/project-direction.md를 읽고 현재 코드를 조사해.
 기존 구현과 미래 제안을 구분하고 UX, 요구사항, Non-goals, 설계, 변경 파일·순서,
 AC, 테스트, 관찰성, 배포·롤백·Dogfooding 계획을 Issue 본문에 반영해줘.
-이 요청은 해당 Issue 본문 갱신과 Planning 상태 설정을 포함해.
+이 요청은 해당 Issue 본문 갱신과 기존 상태 라벨을 제거한 Planning 라벨 설정을 포함해.
 제품·비용·설계 판단이 필요하면 핵심 질문만 하고 독립 조사는 계속해.
 본문을 Human 검토 가능한 상태로 준비하고 승인 전에 구현하거나 Ready로 바꾸지 마.
 ```
@@ -19,7 +19,7 @@ AC, 테스트, 관찰성, 배포·롤백·Dogfooding 계획을 Issue 본문에 �
 
 ```text
 Issue #123의 현재 본문 설계와 AC를 승인해. 승인 근거를 Issue에 기록하고
-Projects Status를 Ready for Implementation으로 변경해줘.
+기존 상태 라벨을 제거하고 Ready for Implementation 라벨을 적용해줘.
 승인 범위 안에서 구현·테스트·Agent Review를 진행하고 모두 PASS면 PR을 만들어줘.
 Tester와 Reviewer는 각각 별도 컨텍스트의 subagent로 검증해줘.
 운영 배포는 후보 SHA와 롤백 계획을 준비한 후 내가 승인할게.
@@ -28,8 +28,9 @@ Tester와 Reviewer는 각각 별도 컨텍스트의 subagent로 검증해줘.
 ## Implementer
 
 ```text
-Issue #123을 구현해줘. Issue 본문, Human 승인 근거, Projects Status를 먼저 확인해.
-Ready for Implementation이 아니거나 승인을 확인하지 못하면 Planning까지만 진행해.
+Issue #123을 구현해줘. Issue 본문, Human 승인 근거, 상태 라벨을 먼저 확인해.
+상태 라벨이 정확히 하나이며 Ready for Implementation인지 확인해.
+라벨 누락·복수 상태·승인 불일치면 구현하지 말고 조사·Planning까지만 진행해.
 열린 PR·기존 브랜치를 확인하고 승인 범위의 코드·테스트·문서를 변경해.
 Tester와 Reviewer를 별도 컨텍스트의 subagent로 실행해 AC와 diff를 독립 확인해줘.
 FAIL이면 구현·테스트·리뷰를 반복하고 현재 SHA에서 모두 PASS일 때 PR을 만들어줘.

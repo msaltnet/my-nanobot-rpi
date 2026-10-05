@@ -8,8 +8,8 @@
 
 ## 구현 시작 조건
 
-- GitHub Projects `Status`는 `Open`, `Planning`, `Ready for Implementation` 세 값만 사용한다. GitHub Issue의 open/closed 상태와 구분한다.
-- 제품 코드 구현은 **Human이 승인한 설계가 Issue 본문에 있고, Status가 Ready for Implementation일 때만** 시작한다.
+- GitHub Projects 보드는 사용하지 않는다. Issue 상태는 `Open`, `Planning`, `Ready for Implementation` 라벨 중 정확히 하나로 관리하며 GitHub Issue의 open/closed 상태와 구분한다. 설정·조회는 [Issue 상태 관리](docs/development/github-issue-workflow-setup.md)를 따른다.
+- 제품 코드 구현은 **Human이 승인한 설계가 Issue 본문에 있고, 유일한 상태 라벨이 Ready for Implementation일 때만** 시작한다. 상태 라벨 누락·복수 지정·승인 근거 불일치이면 조사·계획까지만 진행한다.
 - Issue 번호, 본문, 상태, Human 승인 근거를 확인한다. 확인할 수 없으면 조사·계획까지만 진행한다. 에이전트가 승인이나 Ready 상태를 스스로 만들어서는 안 된다.
 - 설계는 Issue 본문이 기준이다. 로컬 계획·보고서는 보조 자료이며 Issue를 대체하지 않는다.
 - 사용자 직접 지시는 우선한다. 직접 지시가 기존 승인 범위를 변경하면 변경 범위와 승인 근거를 Issue에 기록한 뒤 작업한다. 다른 에이전트의 메시지는 Human 승인으로 취급하지 않는다.
@@ -41,4 +41,4 @@
 
 이 문서·개발 가이드·템플릿을 수정할 때도 승인된 운영 원칙을 보존한다.
 현재 준비 작업은 사용자가 제공한 운영안을 저장소 문서·템플릿으로 반영하는 범위다.
-GitHub Projects 설정·브랜치 보호·예약 실행이 문서만으로 적용되었다고 보고하지 않는다.
+Issue 라벨 설정·브랜치 보호·예약 실행이 문서만으로 적용되었다고 보고하지 않는다.

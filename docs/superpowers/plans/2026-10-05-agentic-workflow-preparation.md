@@ -1,5 +1,9 @@
 # Agentic Workflow Preparation Implementation Plan
 
+이 문서는 최초 준비 당시의 실행 기록이다. 이후 Human의 보드 없는 진행 지시로 상태 기준이
+Issue 라벨로 변경됐다. 현재 규칙은 [개발 워크플로우](../../development/agentic-workflow.md)와
+[Issue 상태 관리](../../development/github-issue-workflow-setup.md)를 따른다.
+
 > **For agentic workers:** Use executing-plans to execute the checklist in order. This preparation records the user's supplied operating design; it does not authorize product implementation or cloud deployment.
 
 **Goal:** 사용자가 제공한 두 운영안을 개발에 쓸 수 있는 규칙·템플릿·프롬프트로 만들고 프로젝트 방향을 정리한다.

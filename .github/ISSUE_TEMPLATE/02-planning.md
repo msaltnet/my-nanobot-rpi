@@ -2,7 +2,7 @@
 name: "구현 설계 · Planning"
 about: "Planner가 Issue 본문을 설계 계약으로 정리합니다. 생성 자체는 승인이 아닙니다."
 title: ""
-labels: ""
+labels: "Planning"
 assignees: ""
 ---
 
@@ -74,10 +74,11 @@ assignees: ""
 
 ## Design Review
 
-단계: **Planning**. 미결정 제품·설계 질문이 없어지면 Human에게 검토를 요청합니다.
+단계: **Planning**. 상태 라벨은 `Planning` 하나만 사용합니다.
+기존 Issue를 갱신했다면 이전 상태 라벨을 제거합니다. 미결정 제품·설계 질문이 없어지면 Human에게 검토를 요청합니다.
 
 - 승인한 Human:
 - 승인 근거 (Issue 댓글 또는 직접 승인 기록):
 - 승인된 설계 버전 / 본문 갱신 시각:
 
-<!-- 위 승인 정보를 Agent가 꾸며 작성하지 않습니다. Human 승인 뒤에만 Projects Status를 Ready for Implementation으로 변경합니다. -->
+<!-- 위 승인 정보를 Agent가 꾸며 작성하지 않습니다. Human 승인 뒤에만 기존 상태 라벨을 제거하고 Ready for Implementation을 적용합니다. 상태 라벨만으로 승인 근거를 대신하지 않습니다. -->

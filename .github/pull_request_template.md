@@ -44,7 +44,7 @@ Closes #<!-- Issue 번호 -->
 
 ## Agent Gate
 
-- [ ] 관련 Issue가 Ready for Implementation이며 Human의 설계 승인이 확인됨
+- [ ] 관련 Issue의 유일한 상태 라벨이 Ready for Implementation이며 Issue 본문 설계의 Human 승인 근거가 확인됨
 - [ ] 현재 커밋 기준 Tests PASS와 Acceptance Criteria별 근거를 기록함
 - [ ] 현재 커밋 기준 Agent Review PASS, 미해결 Critical/Major 없음
 - [ ] 알려진 제약과 운영·마이그레이션 영향을 공개함

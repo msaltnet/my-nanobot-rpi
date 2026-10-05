@@ -2,7 +2,7 @@
 name: "아이디어 · 버그 · 개선 요청"
 about: "Open 단계의 문제를 기록합니다. 구현은 설계 승인 이후 시작합니다."
 title: ""
-labels: ""
+labels: "Open"
 assignees: ""
 ---
 
@@ -20,5 +20,5 @@ assignees: ""
 
 ## Workflow
 
-초기 단계: **Open**. Projects의 Status를 Open으로 설정합니다.
+초기 단계: **Open**. 상태 라벨은 `Open` 하나만 사용합니다.
 이 Issue는 조사·Planning 입력이며, 설계의 Human 승인 전에는 구현하지 않습니다.

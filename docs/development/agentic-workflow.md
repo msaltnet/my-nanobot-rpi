@@ -10,16 +10,18 @@ Issue는 장기 컨텍스트이자 승인된 설계 계약이고, PR은 그 계�
 
 ## 상태와 책임
 
-| Projects Status | 의미 | Agent가 할 수 있는 작업 |
+| Issue 상태 라벨 | 의미 | Agent가 할 수 있는 작업 |
 |-----------------|------|-------------------------|
 | Open | 아이디어·문제 발견 | 기록·초기 조사 |
 | Planning | 요구사항·설계 구체화, Human 승인 대기 | 조사·계획·설계 수정 |
 | Ready for Implementation | Issue 본문 설계에 대한 Human 승인 완료 | 구현·테스트·리뷰·승인 범위의 배포 준비 |
 
 GitHub Issue의 open/closed, PR의 open/merged와 별개다. 구현·PR 검토·실사용 중 Issue는 open이며
-Projects Status는 Ready for Implementation으로 유지한다. In Progress, In Review, Done은 추가하지 않는다.
+상태 라벨은 Ready for Implementation으로 유지한다. In Progress, In Review, Done은 추가하지 않는다.
 작업 진행은 Issue 담당자·연결 PR·검증 기록으로 확인하고, 완료는 Issue closed와 PR merged로 확인한다.
-필드가 없거나 상태·승인을 확인하지 못하면 구현을 시작하지 않는다.
+Projects 보드는 사용하지 않는다. Issue 상태 라벨은 위 세 값 중 정확히 하나여야 한다.
+다른 용도의 bug/documentation 등 라벨은 함께 사용할 수 있다.
+상태 라벨이 없거나 여러 개이거나 승인 근거와 불일치하면 구현을 시작하지 않는다.
 
 ```mermaid
 flowchart TD
@@ -75,7 +77,7 @@ Ready 전 확인 항목:
 - 로그·비용·자원·데이터 보존·배포·롤백·실사용 수용 기준을 정했다.
 - Human이 승인한 설계 버전과 승인 근거가 있다. 단순 상태 변경이나 Agent의 요약만으로 승인했다고 판단하지 않는다.
 
-Human은 Issue 댓글에 승인 대상과 조건을 남기고 Status를 Ready로 바꾼다.
+Human은 Issue 댓글에 승인 대상과 조건을 남기고 기존 상태 라벨을 제거한 뒤 Ready 라벨을 적용한다.
 예: `현재 Issue 본문의 설계와 AC를 승인합니다. 이 범위로 구현하세요. 운영 배포는 후보 보고 후 별도로 승인합니다.`
 직접 채팅 승인은 실제 Human 메시지를 근거로 기록하며, 승인 범위를 확대 해석하지 않는다.
 
@@ -97,7 +99,7 @@ python -m pytest tests/msalt/
 ```
 
 기존 CI는 main 대상 PR과 push에서 Python 3.11/3.12 테스트를 실행한다.
-CI는 Projects 상태·Human 승인·Agent Review·실사용 수용을 자동 검증하지 않는다.
+CI는 Issue 상태 라벨·Human 승인·Agent Review·실사용 수용을 자동 검증하지 않는다.
 실제 검증은 [보고서 템플릿](verification-report-template.md)에 SHA·명령·종료 코드·AC 근거를 기록한다.
 단일 컨텍스트 자기 점검만 수행했다면 독립 검증 완료라고 표시하지 않는다.
 
@@ -131,7 +133,7 @@ Human은 유용성·불편·알림 피로·오류·계속 사용할지와 수용
 - **구현 문제**: Ready 유지, 기존 PR에서 수정 → Testing → Agent Review → 필요 시 후보 재배포·실사용 → Human Review.
 - **설계 문제**: Planning으로 이동, Issue 설계·AC 수정 → Human 재승인 → Ready. Agent가 새 설계를 임의 구현하지 않는다.
 - **승인**: Human PR 검토·실사용 수용·명시적 Merge 승인 확인. 승인 SHA 이후 변경이 있으면 다시 검토한다.
-- **Merge**: PR의 `Closes #<number>`로 Issue 종료를 연결하고 실제 종료를 확인한다. Projects Status를 Done으로 바꾸지 않는다.
+- **Merge**: PR의 `Closes #<number>`로 Issue 종료를 연결하고 실제 종료를 확인한다. Done 라벨을 만들지 않고 마지막 상태 라벨을 유지한다.
 - **운영 확인**: squash/rebase에 따른 새 SHA와 후보 코드의 일치를 확인하고, 승인 범위에 맞게 최종 main 배포·smoke 결과를 남긴다.
 - **회고**: 기대·실제 결과·결정·후속 Issue를 기록한다. 새 사용 문제는 새 Open Issue로 관리한다.
 
@@ -142,12 +144,11 @@ GitHub 기능 차원의 강제를 원하면 별도 검토자 계정과 저장소
 ## 시작하기와 설정 범위
 
 [역할별 프롬프트](agent-prompts.md)를 복사해 Issue 번호와 SHA를 지정하면 단계별로 작업을 시작할 수 있다.
-[GitHub Projects 설정](github-project-setup.md)으로 세 상태 보드를 연결한다.
+[Issue 상태 관리](github-issue-workflow-setup.md)에 따라 세 상태 라벨을 만들고 Ready Issue를 조회한다.
 템플릿은 기본 브랜치에 반영한 뒤 GitHub에서 사용된다. 문서·AGENTS는 운영 규칙이며 GitHub 서버 측 강제 장치는 아니다.
 이번 준비에 예약 Agent 실행, 자동 Merge, 자동 운영 배포는 포함하지 않는다.
 
 GitHub 동작 참고:
 
 - [Issue / PR 템플릿](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests)
-- [Projects 기본 자동화](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-built-in-automations)
 - [PR 리뷰와 본인 PR 승인 제한](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/reviewing-proposed-changes-in-a-pull-request)

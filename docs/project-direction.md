@@ -76,7 +76,8 @@ Watch 명령, 데이터 테이블, threshold, 평가 방식은 현재 구현되�
 단계별 할 일·Issue 후보·검증·완료 조건은 [구현 로드맵](implementation-roadmap.md)에 정리한다.
 순서는 **운영 준비 → 현재 기능 안정화 → Watch 관리 → Watch 알림 → 생활 Review → 통합 Review → 실사용 개선**이다.
 
-위 순서는 제안이며 승인된 구현 큐가 아니다. 구체 작업은 Projects의 Ready Issue에서만 가져온다.
+위 순서는 제안이며 승인된 구현 큐가 아니다. 구체 작업은 유일한 상태 라벨이
+`Ready for Implementation`이고 Issue 본문 설계의 Human 승인이 확인된 Issue에서만 가져온다.
 성공은 브리핑·알림 누락과 중복, 기록 성공·수정 가능성, API 실패·비용, 운영 자원,
 그리고 Human의 `계속 사용하겠다`는 판단을 함께 보고 정한다. 달성하지 않은 지표를 성공으로 기록하지 않는다.
 
