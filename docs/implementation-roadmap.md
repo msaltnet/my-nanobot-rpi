@@ -71,7 +71,17 @@ RPi/OCI 모두에 적용 가능한 절차와 환경 차이를 확인하고, 실�
 Human의 “project 보드 없이 진행하자” 지시에 따라 상태 기준을 Issue 라벨로 변경했다.
 세 라벨을 실제 생성했고 [Human 명시 승인](https://github.com/msaltnet/my-nanobot-rpi/issues/2#issuecomment-5995427906) 후
 #2에 Ready for Implementation 하나만 적용했다. `.env` 배포 대상 항목·운영 변수 대응도 문서로 제공한다.
-RPi/OCI 실제 설치·기동·백업/복구·후보 배포는 미수행이며 0단계 전체 완료 상태는 아니다.
+위 2026-10-05 문서 준비 시점에는 RPi/OCI 실제 설치·기동·백업/복구·후보 배포가 미수행이었다.
+
+진행 기록(2026-10-06): [Issue #4](https://github.com/msaltnet/my-nanobot-rpi/issues/4)의
+[Human 설계·운영 실행 승인](https://github.com/msaltnet/my-nanobot-rpi/issues/4#issuecomment-5997402971) 범위에서
+OCI 운영 데이터를 일관된 정지 구간에 백업하고, 운영 경로와 분리된 복구 사본의
+파일 메타데이터·체크섬·SQLite 무결성과 4개 테이블 행 수를 비교했다.
+20.972초 이내 원래 서비스·타이머 상태로 복귀했고 운영 SHA는 변경하지 않았다.
+[실행 보고서](development/reports/2026-10-06-oci-backup-restore.md)와 연결 PR에서
+현재 문서 SHA의 독립 Tests / Agent Review 결과 및 제한을 확인한다.
+RPi 실제 검증·후보 배포·운영 DB 덮어쓰기 복원·실환경 롤백·수동 Telegram/API smoke는
+미수행이다. 두 플랫폼을 포괄하는 체크 항목은 그대로 유지하며 0단계 전체 완료로 표시하지 않는다.
 
 ## 단계 1. 기존 뉴스·생활 기록 안정화
 
