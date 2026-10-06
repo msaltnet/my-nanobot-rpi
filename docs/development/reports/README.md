@@ -8,4 +8,6 @@
 이후 [Human Ready 승인](https://github.com/msaltnet/my-nanobot-rpi/issues/2#issuecomment-5995427906)을 기록하고
 Issue #2의 유일한 상태 라벨을 Ready for Implementation으로 적용했다.
 `.env` 대상 항목·최신 문서 보완의 검증은 수정된 후보 SHA에서 다시 수행해 PR에 기록한다.
-실제 RPi/OCI 설치·백업·복구·배포·Telegram/API 검증은 실행 전까지 BLOCKED다.
+위 보고서 작성 당시 실제 RPi/OCI 설치·백업·복구·배포·Telegram/API 검증은 BLOCKED였다.
+
+- [OCI 운영 데이터 백업·격리 복구](2026-10-06-oci-backup-restore.md): [Issue #4](https://github.com/msaltnet/my-nanobot-rpi/issues/4)의 승인 범위에서 OCI 실제 운영 데이터를 정지 백업하고 격리 복구·원래 서비스 상태 재개를 확인했다. 현재 문서 SHA의 독립 Tests / Agent Review는 연결 PR에 기록한다. RPi·후보 배포·운영 DB 덮어쓰기 복원·수동 외부 발송은 미수행이다.
