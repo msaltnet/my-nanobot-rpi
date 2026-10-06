@@ -68,7 +68,9 @@ archive와 격리 복구 위치는 checkout·운영 workspace 밖의 새 공간�
 
 ### Regression / 실패 대응
 
-- 실제 운영 원본을 훼손하지 않고 missing/corrupt DB·checksum mismatch·WAL·공백 경로/따옴표 테이블은 별도 합성 데이터로 검증한다. 실행한 독립 Tester 결과는 PR에 구분해 기록한다.
+- 독립 Tester가 실제 운영 원본을 훼손하지 않고 별도 합성 데이터에서 missing DB 거부·새 파일 무생성, corrupt DB 거부, checksum mismatch 감지, 공백 경로·따옴표 테이블·WAL 데이터의 `mode=ro` 조회를 확인했다. 합성 검사와 실제 운영 데이터 비교를 구분한다.
+- 합성 WAL 검사에서 처음에는 모든 sidecar의 바이트 불변을 가정하여 실패했다. 재검사 결과 SHM의 offset 104에서 1바이트 변화가 있었고 DB·WAL digest와 파일 크기는 그대로였다. 이 SHM 변화는 숨기거나 실제 데이터 손상으로 합산하지 않고 별도 결과로 기록한다. 실제 운영 백업 당시에는 sidecar가 없었고 실제 복구 사본은 읽기 검사 후에도 전체 manifest가 일치했다.
+- 독립 Tester는 archive·전체 manifest·DB 비교를 직접 재실행하고 현재 운영 SHA·clean checkout·유닛 상태를 조회했다. 현재 읽기 조회 8개와 비공개 기록의 운영 절차 명령 232개는 모두 종료 코드 0이었다. 이미 종료한 writer 정지 구간은 당시의 기록·절차와 비교했으며, 운영 중단을 다시 실행한 것이 아니다.
 - 정지 중 검사는 10분 제한 및 SQLite progress handler로 중단할 수 있도록 준비해 운영 복귀 시간을 확보했다. 중단·실패 시 유닛별 복귀를 시도하고 완료하지 못한 백업은 성공으로 표시하지 않는다.
 - 재개 전 pending systemd job·Persistent timer·내부 cron의 예약을 검토했다. 원래 inactive였던 oneshot은 수동 실행하지 않았다. 정상 운영 재개의 기존 예약/API 호출 가능성은 Human 승인 범위에 포함된다.
 - 제품 pytest는 N/A: 제품 코드·스키마·의존성 변경이 없다. 문서 검증이나 제품 pytest를 실제 백업·복구 증거로 대신하지 않는다.
