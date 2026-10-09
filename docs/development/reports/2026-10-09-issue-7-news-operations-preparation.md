@@ -25,3 +25,12 @@
 별도 Reviewer 미수행. PASS 미기록.
 ## Human Review Handoff
 운영 실행 전 후보 SHA/현재 운영 버전/대상·작업창·hard 비용 차단·latest backup/rollback 근거를 후보 PR로 제시한다. 별도 실행 승인 → 실제 7일 관찰 → Human 수용/명시 merge 전에는 Issue를 종료하지 않는다. RPi/생활 전체 운영 검증 완료로 확대하지 않는다.
+
+## 후속 독립 준비 검수 — 2026-10-09 KST
+
+문서 작성 시점의 별도 검수 대기 기록 뒤, 후보 `bcbdd6b98863cd8ca562de47b8e63f1175243396`의 준비 산출물을 `tester_7`와 `reviewer_7`가 별도 컨텍스트에서 Issue와 전체 diff를 직접 확인했다.
+
+- Tester: `git diff --check 96f8b344519494cea5fd127dbe8818404fce3182...HEAD` exit 0. PowerShell의 승인 v2 섹션 대조(11,152자 일치), 21개 unique D1–D7×세 시각·9열·전부 BLOCKED 상태 확인, 변경 Markdown의 상대 링크 11개/오류 0 확인. 준비 Tests PASS. Git status는 Tester sandbox 권한 제한으로 확인 실패였으며 별도 후보/branch/diff 조회는 exit 0이었다.
+- Reviewer: 승인/ACK·실수신 구분·재전송·보존·비용 상한 차단/rollback·Human Gate 검토 PASS, 미해결 Critical/Major/Minor 0. 관찰 양식의 실제 수신 시각과 part/POST 증거 열 보완 후 재검수했다.
+- 이 문서의 후속 반영 뒤 최종 후보 SHA/diff·독립 준비 검수 근거는 연결 PR에 고정한다. 제품 pytest는 문서 변경 범위 N/A이며 최종 #13/#14 통합 후보에서 따로 필요하다.
+- **운영 AC1–6 전체, hard 비용 enforcement·Linux/최종 통합 후보 확인·배포·실수신·7일 관찰·Human 수용은 계속 BLOCKED**다. 준비 PASS는 운영 실행/병합 승인이나 전체 Issue 완료가 아니다.
