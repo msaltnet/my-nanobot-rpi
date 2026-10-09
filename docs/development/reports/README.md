@@ -14,3 +14,5 @@ Issue #2의 유일한 상태 라벨을 Ready for Implementation으로 적용했�
 
 - [뉴스 오프라인 검증](2026-10-08-news-validation.md): [Issue #7](https://github.com/msaltnet/my-nanobot-rpi/issues/7)의 승인된 v1 범위에서 SQLite/합성 데이터 및 fake 수집·LLM·전송 경계를 검증했다. 테스트 SHA `d784c80`, 전체 회귀 200 passed. 실제 예약 수신·운영 관찰·정책 수용은 BLOCKED이며 #13/#14 수정은 별도 승인 대상이다. 최종 후보의 독립 Tests / Agent Review는 연결 PR에 기록한다.
 - [뉴스 운영 검증 준비](2026-10-09-issue-7-news-operations-preparation.md): #7 승인 v2 실행 체크리스트·21slot 양식 준비. 실제 배포/실수신/7일 관찰은 BLOCKED이며 후보 PR 검수 후 별도 실행 승인 필요.
+
+- [뉴스 후보 운영 사전 검증](2026-10-09-news-operations-preflight.md): 실제 DB 읽기 사본의 보존·migration·구코드 호환·격리 복구. 전체 운영 관찰은 비용 enforcement 근거 확보 전 BLOCKED.
