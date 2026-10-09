@@ -5,6 +5,8 @@ assertions prove configuration only; they do not prove execution or receipt.
 """
 
 import json
+import re
+import shlex
 import socket
 import sqlite3
 from datetime import datetime, timedelta
@@ -283,17 +285,100 @@ def test_mark_failure_returns_no_text_and_restart_retry_is_available(storage):
     assert reopened.get_briefed_article_urls([item["url"]]) == {item["url"]}
 
 
-def test_collect_then_cli_briefing_collects_all_four_paths_twice(storage, offline_boundaries):
-    """Characterizes the skill's two-command sequence, not real remote call cost."""
+def _run_skill_briefing_steps(time_of_day):
+    """Consume the skill's executable CLI blocks, choosing one time variant."""
+    skill = Path(__file__).resolve().parents[3] / "msalt/skills/news-briefing/SKILL.md"
+    blocks = re.findall(r"```bash\s*\n(.*?)```", skill.read_text(encoding="utf-8"), re.S)
+    results = []
+    for block in blocks:
+        commands = [shlex.split(line) for line in block.splitlines() if line.strip()]
+        briefing_choices = [args for args in commands if args[:3] == ["my-nanobot-rpi", "news", "briefing"]]
+        if briefing_choices:
+            commands = [next(args for args in briefing_choices if (args[3] if len(args) > 3 else "morning") == time_of_day)]
+        for args in commands:
+            if args == ["my-nanobot-rpi", "news", "collect"]:
+                results.append(cli.run_collect())
+            elif args[:3] == ["my-nanobot-rpi", "news", "briefing"]:
+                results.append(cli.run_briefing(args[3] if len(args) > 3 else "morning"))
+            else:
+                raise AssertionError(f"unsupported skill command: {args}")
+    assert results, "skill has no executable CLI steps"
+    return results
+
+
+@pytest.mark.parametrize("time_of_day", ["morning", "afternoon", "evening"])
+def test_skill_briefing_collects_all_four_paths_once(storage, offline_boundaries, time_of_day):
+    """The real skill procedure performs one collection for its selected briefing."""
     fakes, _ = offline_boundaries
     for index, fake in enumerate(fakes):
         fake.collect_all.return_value = [article(f"cli-{index}")]
-    assert "4건" in cli.run_collect()
-    text = cli.run_briefing("evening")
+    results = _run_skill_briefing_steps(time_of_day)
+    text = results[-1]
     assert len(stored_urls(storage)) == 4
     assert all(article(f"cli-{i}")["url"] in text for i in range(4))
     for fake in fakes:
-        assert fake.collect_all.call_count == 2
+        fake.collect_all.assert_called_once_with()
+
+
+@pytest.mark.parametrize("scenario", ["one_failure", "all_empty", "empty_db", "duplicate"])
+def test_skill_keeps_one_collection_for_partial_empty_and_duplicate_results(
+    storage, offline_boundaries, scenario
+):
+    fakes, _ = offline_boundaries
+    existing = article("existing")
+    if scenario != "empty_db":
+        storage.insert_article(**existing)
+    if scenario == "one_failure":
+        fakes[0].collect_all.side_effect = RuntimeError("synthetic source failure")
+        fakes[1].collect_all.return_value = [article("new")]
+    elif scenario == "duplicate":
+        fakes[0].collect_all.return_value = [dict(existing, title="replacement")]
+
+    text = _run_skill_briefing_steps("evening")[-1]
+
+    if scenario == "empty_db":
+        assert "수집된 뉴스가 없습니다" in text
+    else:
+        assert existing["url"] in text
+    if scenario == "one_failure":
+        assert article("new")["url"] in text
+    elif scenario != "empty_db":
+        assert stored_urls(storage) == {existing["url"]}
+    if scenario == "duplicate":
+        assert storage.get_articles_since("2020-01-01")[0]["title"] == existing["title"]
+    for fake in fakes:
+        fake.collect_all.assert_called_once_with()
+
+
+def test_manual_collect_remains_a_single_collection(storage, offline_boundaries):
+    fakes, llm = offline_boundaries
+    item = article("manual")
+    fakes[0].collect_all.return_value = [item]
+
+    assert cli.run_collect() == "뉴스 수집 완료: 1건"
+
+    assert stored_urls(storage) == {item["url"]}
+    llm.chat.completions.create.assert_not_called()
+    for fake in fakes:
+        fake.collect_all.assert_called_once_with()
+
+
+def test_skill_storage_error_does_not_generate_or_repeat(storage, offline_boundaries):
+    fakes, llm = offline_boundaries
+    first, failed = article("first"), article("failed")
+    fakes[0].collect_all.return_value = [first, failed]
+    with sqlite3.connect(storage.db_path) as conn:
+        conn.execute("""CREATE TRIGGER reject_article BEFORE INSERT ON news_articles
+                        WHEN NEW.url = 'https://example.invalid/failed'
+                        BEGIN SELECT RAISE(ABORT, 'synthetic insert failure'); END""")
+
+    with pytest.raises(sqlite3.IntegrityError, match="synthetic insert failure"):
+        _run_skill_briefing_steps("evening")
+
+    assert stored_urls(Storage(storage.db_path)) == {first["url"]}
+    llm.chat.completions.create.assert_not_called()
+    for fake in fakes:
+        fake.collect_all.assert_called_once_with()
 
 
 def test_keyword_search_includes_old_articles_and_over_ten_without_marking(storage):
