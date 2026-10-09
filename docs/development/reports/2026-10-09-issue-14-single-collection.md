@@ -65,6 +65,6 @@
 
 위 Implementer 보고서의 “독립 검수 BLOCKED”는 작성 시점 이력이다. 후속 검증 후보 `f6e78746180d3175e2433a065c77f402659d67ad`에서 별도 Tester `tester_14`와 Reviewer `reviewer_14`가 Issue·diff를 직접 확인했다.
 
-- 독립 Tester: `python -m pytest tests/msalt/news/ tests/msalt/test_cli.py -q -p no:cacheprovider --basetemp=.pytest_cache/independent-tester14`: 91 passed, exit 0. `python -m pytest tests/msalt/ -q -p no:cacheprovider --basetemp=.pytest_cache/independent-tester14`: 208 passed, exit 0. 코드 SHA `778d3d1c39a5abcba2884b95190aea51d13fd953`와 후보의 diff는 이 보고서 추가만 있으며 코드/테스트 변화 없음을 확인했다.
+- 독립 Tester: `.venv/Scripts/python.exe -m pytest tests/msalt/news/ tests/msalt/test_cli.py -q -p no:cacheprovider --basetemp=.pytest_cache/independent-tester14`: 91 passed, exit 0. `.venv/Scripts/python.exe -m pytest tests/msalt/ -q -p no:cacheprovider --basetemp=.pytest_cache/independent-tester14`: 208 passed, exit 0. 코드 SHA `778d3d1c39a5abcba2884b95190aea51d13fd953`와 후보의 diff는 이 보고서 추가만 있으며 코드/테스트 변화 없음을 확인했다.
 - 독립 Reviewer: 후보 전체 diff 및 승인 v1 직접 검토, Agent Review PASS, Critical/Major 0. Minor의 보고서 독립 결과/SHA 반영을 이 절로 해결한다.
 - 현재 AC1–4 오프라인 구현 Tests/Agent Review PASS. **AC5 실제 통합 운영/실수신과 Human 수용은 BLOCKED**다. 이번 문서 반영 뒤 최종 후보 SHA의 diff/재검수 근거는 연결 PR에 고정한다. 운영 배포·발송·병합 승인을 대신하지 않는다.
