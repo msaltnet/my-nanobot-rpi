@@ -7,19 +7,19 @@
 - 검증한 제품 코드/테스트 SHA: `c7bb3fb292907b91b2a53f42af6cbd01b7e649e8`; 비교 base `1c1d05e1b34098c22107b616e077e5a2018663ed` (#14 포함). 이 보고서는 제품 코드 변경 없는 후속 문서 커밋이다. 독립 검증은 보고서를 포함한 최종 후보 SHA에서 수행한다.
 - nanobot: [관리 fork](https://github.com/msaltnet/nanobot) immutable gitlink `13c7435eb85577d3004ee4bbee5fcb4fbdcc203d`. 원격 가용성 및 이 SHA의 독립 upstream Tester 315 PASS / Reviewer 회귀 43 PASS·지적 없음은 부모 작업에서 확인한 별도 근거다. 이 보고서는 upstream 소스를 수정하지 않았다.
 - 환경: Windows, Python 3.12.7, worktree 전용 editable root/dependency 설치. 새 테스트는 임시 SQLite/workspace, socket/DNS 차단, fake 모델/HTTP를 사용한다. subprocess crash 검증도 실제 sender와 프로세스 내부 네트워크 차단을 사용한다.
-- 수행자: Implementer 자체 검증. **Root 독립 Tester/Reviewer PASS는 아직 이 보고서의 근거에 포함하지 않는다.**
+- 수행자: Implementer 자체 검증, 별도 컨텍스트 test_root_13 및 review_root_13. 독립 최종 판정 대상은 e3c18126a876e2474e08795ee2c6423906222f8b이며, 본 후속 변경은 판정 결과를 기록하는 문서 수정이다.
 
 ## Test Report
 
 | AC | 시나리오 | 명령 또는 재현 절차 | 실제 결과 / 근거 | PASS / FAIL / BLOCKED |
 |----|----------|--------------------|------------------|-----------------------|
-| AC1 | 생성과 전송 확정 분리; default/legacy True preview가 mark하지 않음 | test_briefing, test_offline_validation, test_delivery | 기존 실패 재현 7건을 승인된 안전 기대값으로 변경. 실제 ACK 전 mark 0; 전체 ACK 후 정확한 snapshot URL만 확정 | 자체 PASS |
-| AC2 | 알려진 미발송 재시도와 명시적 수동 복구 | test_delivery, test_delivery_hardening | 최초 포함 최대 3 POST, 1/2초 backoff, unknown 자동 재발송 0; manual은 ACK skip, confirm-uncertain 필수, observation window 전체 1회; no-payload 거부·regenerate 동일 ID | 자체 PASS |
-| AC3 | 경쟁·재시작·부분 전송·저장 실패·충돌과 기한 | 세 delivery 테스트 모듈 | 실제 SQLite slot/active reservation 경쟁; 잘못된 attempt ACK/reject 무변경; lease 복구와 stale owner fencing; 실제 child abrupt exit 5시점; final insert trigger 원자 rollback·ACK 유지·POST 없는 수동 finalize | 자체 PASS |
-| AC4 | legacy 기사/briefed/생활 데이터 보존·migration·복귀 | test_delivery_hardening 및 기존 storage/tracking 회귀 | additive migration 재실행, 새 DDL 각 실패 지점 rollback; 누락/약화 index·slot UNIQUE 거부; 임시 backup/restore·코드 복귀 후 최신 생활 기록 유지 | 자체 PASS |
-| AC5 | 설치된 tool·현재 대상/thread·USER 및 실제 bound-cron SYSTEM 경계 | test_delivery_integration, test_news_runtime | 실제 installed entry point/API1, 세 slot 스킬 consumer→실제 tool/loop, USER/cron sent/failed/unknown/partial/empty/generation failure/cancel, 잘못된 allowFrom/target/sender/token, unsupported runtime 외부 작업 0 | 자체 PASS; 독립 root Gate 대기 |
-| AC6 | 불변 payload/URL/parts, 자원 한도, 외부 실패 | test_delivery_hardening, test_delivery 및 전 뉴스 회귀 | payload·manifest·part hash 검사, URL 보존 분할/overflow, 5종 누적 quota race/restart, summary reservation, SDK retries0/10초 timeout, 실제 BotAPI trace 분류·토큰 log redaction, 종료 가능한 생성 child deadline/cancel | 자체 PASS; 금액 상한은 #7 별도 |
-| AC7 | 최종 root/gitlink 독립 검수·Python 3.11/3.12 Linux·운영 수용 | CI에 installed Python 환경/두 버전 matrix/고정 upstream ownership 테스트 연결 | 로컬 3.12 자체 검증 완료; Linux/3.11 CI 실행·독립 root Gate·Human smoke/실수신·배포·merge 미수행 | **BLOCKED** |
+| AC1 | 생성과 전송 확정 분리; default/legacy True preview가 mark하지 않음 | test_briefing, test_offline_validation, test_delivery | 기존 실패 재현 7건을 승인된 안전 기대값으로 변경. 실제 ACK 전 mark 0; 전체 ACK 후 정확한 snapshot URL만 확정 | 독립 오프라인 PASS |
+| AC2 | 알려진 미발송 재시도와 명시적 수동 복구 | test_delivery, test_delivery_hardening | 최초 포함 최대 3 POST, 1/2초 backoff, unknown 자동 재발송 0; manual은 ACK skip, confirm-uncertain 필수, observation window 전체 1회; no-payload 거부·regenerate 동일 ID | 독립 오프라인 PASS |
+| AC3 | 경쟁·재시작·부분 전송·저장 실패·충돌과 기한 | 세 delivery 테스트 모듈 | 실제 SQLite slot/active reservation 경쟁; 잘못된 attempt ACK/reject 무변경; lease 복구와 stale owner fencing; 실제 child abrupt exit 5시점; final insert trigger 원자 rollback·ACK 유지·POST 없는 수동 finalize | 독립 오프라인 PASS |
+| AC4 | legacy 기사/briefed/생활 데이터 보존·migration·복귀 | test_delivery_hardening 및 기존 storage/tracking 회귀 | additive migration 재실행, 새 DDL 각 실패 지점 rollback; 누락/약화 index·slot UNIQUE 거부; 임시 backup/restore·코드 복귀 후 최신 생활 기록 유지 | 독립 오프라인 PASS |
+| AC5 | 설치된 tool·현재 대상/thread·USER 및 실제 bound-cron SYSTEM 경계 | test_delivery_integration, test_news_runtime | 실제 installed entry point/API1, 세 slot 스킬 consumer→실제 tool/loop, USER/cron sent/failed/unknown/partial/empty/generation failure/cancel, 잘못된 allowFrom/target/sender/token, unsupported runtime 외부 작업 0 | 독립 오프라인 PASS |
+| AC6 | 불변 payload/URL/parts, 자원 한도, 외부 실패 | test_delivery_hardening, test_delivery 및 전 뉴스 회귀 | payload·manifest·part hash 검사, URL 보존 분할/overflow, 5종 누적 quota race/restart, summary reservation, SDK retries0/10초 timeout, 실제 BotAPI trace 분류·토큰 log redaction, 종료 가능한 생성 child deadline/cancel | 독립 오프라인 PASS; 금액 상한은 #7 별도 |
+| AC7 | 최종 root/gitlink 독립 검수·Python 3.11/3.12 Linux·운영 수용 | CI에 installed Python 환경/두 버전 matrix/고정 upstream ownership 테스트 연결 | 로컬 3.12 자체 검증 완료; 독립 root Gate PASS; Linux/3.11 CI 실행·Human smoke/실수신·배포·merge 미수행 | **BLOCKED** |
 
 ### Regression
 
@@ -46,7 +46,7 @@ Windows linked worktree Git에는 process-local `GIT_WORK_TREE`를 해당 checko
 
 ### Result
 
-제품 코드 SHA에 대한 **Implementer 자체 테스트 PASS**. 최초 PR 생성의 Agent Gate는 독립 Tester PASS와 Reviewer PASS이며, 이 자체 보고서 작성 시점에는 별도 결과 기록을 기다린다. Linux Python 3.11/3.12 CI는 후보 PR에서 확인하고, 운영 실행·실수신 수용·Human Review·명시적 병합 승인은 후속 Gate다. 미실행 운영 검증과 전체 AC7은 **BLOCKED**로 유지하며 최초 PR 생성의 선행 조건으로 혼동하지 않는다. 소스·테스트 수정이 생기면 영향 범위를 다시 검증한다.
+제품 코드 SHA 및 문서 포함 최종 후보 e3c18126a876e2474e08795ee2c6423906222f8b에 대해 **독립 Tests PASS / Agent Review PASS**. Tester는 전체 회귀 321 passed in 41.00s, Reviewer는 별도 전체 회귀 321 passed in 41.40s를 확인했다. 두 역할 모두 최종 후보와 c7bb3fb 사이 소스·테스트·gitlink 변경 없음 및 diff --check를 확인했다. Linux Python 3.11/3.12 CI는 후보 PR에서 확인하고, 운영 실행·실수신 수용·Human Review·명시적 병합 승인은 후속 Gate다. 미실행 운영 검증과 전체 AC7은 **BLOCKED**로 유지하며 최초 PR 생성의 선행 조건으로 혼동하지 않는다. 소스·테스트 수정이 생기면 영향 범위를 다시 검증한다.
 
 ## Agent Review Report
 
@@ -71,14 +71,21 @@ Windows linked worktree Git에는 process-local `GIT_WORK_TREE`를 해당 checko
 - 오류·중복·시간대: KST slot 키, UTC/wall lease+공유 monotonic action deadline, API ACK와 Human 증거 분리.
 - 비밀·자원·동시성: raw 예외/토큰 비기록, status 대상/본문 비노출, SQLite reservation/quota 선확정, bounded generation process 회수.
 - 운영 가능성: readonly list/show, operator retry/resolve/regenerate, 현재 DB 보존 rollback 문서화.
-- 회귀: 전체 321 PASS; Python 3.11/Linux 및 독립 root 검수는 미수행 상태를 숨기지 않음.
+- 회귀: 독립 Tester 전체 321 PASS 및 Reviewer 전체 321 PASS. Python 3.11/Linux는 후보 PR CI에서 확인한다.
 
 ### Result
 
-자체 리뷰 수정 완료. **독립 Root Agent Review: BLOCKED (별도 컨텍스트 최종 SHA 판정 대기)**. 위 early review 지적 해결은 최종 독립 PASS를 대신하지 않는다.
+별도 컨텍스트 review_root_13이 최종 후보 e3c18126a876e2474e08795ee2c6423906222f8b 전체 diff와 승인 Issue를 직접 확인하여 **독립 Agent Review PASS**. 미해결 Critical/Major/Minor 0. 위 지적과 최종 문서 정정은 모두 해결되었다.
 
 ## Human Review Handoff
 
-부모 작업은 보고서를 포함한 최종 candidate SHA로 독립 Tester/Reviewer를 수행한 뒤 PR을 준비한다. 배포 전 구체 대상·후보 SHA·작업창·backup/rollback·추가 유료 비용/중단 기준을 승인받고 #7의 smoke/실수신·생활 데이터 보존 수용을 확인한다. 이번 작업은 production DB/설정·서버·실제 모델/검색/Telegram을 사용하지 않았으며 push·root PR·배포·병합을 수행하지 않았다.
+독립 Tester/Reviewer Gate 완료 후 결과 기록만 반영한 문서 커밋을 범위 재확인하고 후보 PR을 준비한다. 배포 전 구체 대상·후보 SHA·작업창·backup/rollback·추가 유료 비용/중단 기준을 승인받고 #7의 smoke/실수신·생활 데이터 보존 수용을 확인한다. 이번 작업은 production DB/설정·서버·실제 모델/검색/Telegram을 사용하지 않았으며 push·root PR·배포·병합을 수행하지 않았다.
 
 운영 제약: 전용 전달 coordinator 동작(명시 regenerate/retry 포함)에 대한 DB 전체 누적 24 생성/72 요약/25 논리 전달/100 part/300 POST, 수동 retry action 1회는 자동 초기화되지 않는다. 독립 CLI preview는 원장을 쓰지 않으므로 이 전달 계수에 포함되지 않는다. preview의 수집·요약 비용과 검색·대화 모델·오케스트레이션을 포함한 총비용 강제 차단은 #7 budget preflight에서 별도 검증해야 한다. subprocess 종료의 bounded 정리 시간은 최대 4초이며 외부 요청이 이미 처리·과금되었는지는 보장하지 않는다. 정확히 한 번 전달 또는 US$5 총액 차단을 이 기능만으로 주장하지 않는다. generation worker는 동작 상한/취소 시 종료되어 이후 요청을 계속하는 thread를 남기지 않는다.
+
+### Independent verification evidence
+
+- Tester: 별도 컨텍스트 `test_root_13`; `.venv/Scripts/python.exe -m pytest tests/msalt/ -q -p no:cacheprovider --basetemp=.superpowers/root-independent-tester --tb=short` 계열 독립 임시 경로 실행, 321 PASS / 41.00s / exit 0. pip check, 변경 16개 파일 Ruff, installed API1·단일 entry point, source/test/gitlink unchanged, candidate diff check 모두 PASS.
+- Reviewer: 별도 컨텍스트 `review_root_13`; Issue v1.1과 base→candidate 전체 diff 직접 검토, 독립 pytest 전체 321 PASS / 41.40s / exit 0. 이전 지적 해결과 최종 문서 범위 확인, 미해결 발견 사항 0.
+- 제품·테스트 SHA `c7bb3fb292907b91b2a53f42af6cbd01b7e649e8`; 두 역할 최종 검수 SHA `e3c18126a876e2474e08795ee2c6423906222f8b`; immutable dependency `13c7435eb85577d3004ee4bbee5fcb4fbdcc203d`.
+- AC1–6 독립 오프라인 PASS. AC7의 Linux CI 및 운영/Human 항목은 위 판정과 구분한다. 후보 PR의 CI와 배포/실수신 승인 결과는 PR에서 후속 기록한다.
