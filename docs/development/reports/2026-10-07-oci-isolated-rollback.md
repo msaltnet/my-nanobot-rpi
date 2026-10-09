@@ -1,5 +1,14 @@
 # OCI 최신 백업·격리 데이터 복귀·합성 tracking 검증
 
+## 이후 수용·종료 및 보고서 정리 — 2026-10-09 KST
+
+아래 실행·테스트·AC 표는 2026-10-07 당시 검증 기록이다. 당시 BLOCKED 판정과 운영 SHA를 현재 운영 상태나 전체 AC PASS로 바꾸지 않는다.
+
+- [Human 부분 결과 수용](https://github.com/msaltnet/my-nanobot-rpi/pull/12#issuecomment-6040546799): 후보 `ca5de4cd293a32f781f506126e1e080087b5cf8c`의 최신 백업·격리 재복원·39.704초 중단 후 상태 복구 보고서에 대해 Human이 직접 “검수 완료”라고 응답했다.
+- [Human 관리상 종료 결정](https://github.com/msaltnet/my-nanobot-rpi/issues/6#issuecomment-6040692006): 이후 Human의 직접 “종료” 지시에 따라 #6은 closed다. 실제 Telegram/news/tracking smoke·RPi·관찰은 미검증으로 남고 전체 AC 완료를 의미하지 않는다.
+- 현재 Human의 “진행”은 PR #12 보고서의 충돌 해결·재검수·검토 가능한 후보 준비 범위다. 새 후보의 병합 승인, 운영 배포·백업 재실행·서비스 변경·추가 발송·데이터 수정 승인이 아니다.
+- 최신 main의 뉴스·생활 기록 검증 색인을 보존하며 통합했다. main 대비 PR 변경은 본 보고서와 색인뿐이다. 과거 실제 운영 검증은 이번에 재실행하지 않았으며 새 후보는 문서 통합·보고서 보존 범위로 독립 검증한다.
+- 최종 후보 SHA, 실행한 문서 검사·독립 Tester/Reviewer 결과는 PR #12에 기록한다. 문서의 운영 배포·Dogfooding N/A 수용과 새 후보 병합은 Human에게 최종 확인한다.
 ## Context
 
 - 계약: [Issue #6](https://github.com/msaltnet/my-nanobot-rpi/issues/6)의 2026-10-07 **OCI 진행 결정** 및 1–6 단계 부분 실행 승인.
