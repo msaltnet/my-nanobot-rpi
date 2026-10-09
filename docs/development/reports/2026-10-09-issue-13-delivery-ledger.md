@@ -85,7 +85,7 @@ Windows linked worktree Git에는 process-local `GIT_WORK_TREE`를 해당 checko
 
 ### Independent verification evidence
 
-- Tester: 별도 컨텍스트 `test_root_13`; `.venv/Scripts/python.exe -m pytest tests/msalt/ -q -p no:cacheprovider --basetemp=.superpowers/root-independent-tester --tb=short` 계열 독립 임시 경로 실행, 321 PASS / 41.00s / exit 0. pip check, 변경 16개 파일 Ruff, installed API1·단일 entry point, source/test/gitlink unchanged, candidate diff check 모두 PASS.
+- Tester: 별도 컨텍스트 `test_root_13`; `.venv/Scripts/python.exe -m pytest tests/msalt/ -q -p no:cacheprovider --basetemp=.superpowers/tester-root13-temp` 실행, 321 PASS / 41.00s / exit 0. pip check, 변경 16개 파일 Ruff, installed API1·단일 entry point, source/test/gitlink unchanged, candidate diff check 모두 PASS.
 - Reviewer: 별도 컨텍스트 `review_root_13`; Issue v1.1과 base→candidate 전체 diff 직접 검토, 독립 pytest 전체 321 PASS / 41.40s / exit 0. 이전 지적 해결과 최종 문서 범위 확인, 미해결 발견 사항 0.
 - 제품·테스트 SHA `c7bb3fb292907b91b2a53f42af6cbd01b7e649e8`; 두 역할 최종 검수 SHA `e3c18126a876e2474e08795ee2c6423906222f8b`; immutable dependency `13c7435eb85577d3004ee4bbee5fcb4fbdcc203d`.
 - AC1–6 독립 오프라인 PASS. AC7의 Linux CI 및 운영/Human 항목은 위 판정과 구분한다. 후보 PR의 CI와 배포/실수신 승인 결과는 PR에서 후속 기록한다.
