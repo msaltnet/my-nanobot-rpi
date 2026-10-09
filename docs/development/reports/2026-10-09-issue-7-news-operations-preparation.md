@@ -25,4 +25,3 @@
 별도 Reviewer 미수행. PASS 미기록.
 ## Human Review Handoff
 운영 실행 전 후보 SHA/현재 운영 버전/대상·작업창·hard 비용 차단·latest backup/rollback 근거를 후보 PR로 제시한다. 별도 실행 승인 → 실제 7일 관찰 → Human 수용/명시 merge 전에는 Issue를 종료하지 않는다. RPi/생활 전체 운영 검증 완료로 확대하지 않는다.
-

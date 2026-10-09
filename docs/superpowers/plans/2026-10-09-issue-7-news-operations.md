@@ -14,4 +14,3 @@ Files: news-operations-validation.md, news-observation-record-template.md, repor
 - [ ] Review links/paths/diff --check and exact approved ceilings/partial stop/preservation.
 - [ ] Align with #13/#14 candidate and rebase own committed docs atop final #13 branch.
 - [ ] Independent Tester/Reviewer direct approved Issue/diff verification; commit and PR only after preparation PASS.
-
