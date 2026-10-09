@@ -81,4 +81,4 @@ Windows linked worktree Git에는 process-local `GIT_WORK_TREE`를 해당 checko
 
 부모 작업은 보고서를 포함한 최종 candidate SHA로 독립 Tester/Reviewer를 수행한 뒤 PR을 준비한다. 배포 전 구체 대상·후보 SHA·작업창·backup/rollback·추가 유료 비용/중단 기준을 승인받고 #7의 smoke/실수신·생활 데이터 보존 수용을 확인한다. 이번 작업은 production DB/설정·서버·실제 모델/검색/Telegram을 사용하지 않았으며 push·root PR·배포·병합을 수행하지 않았다.
 
-운영 제약: DB 전체 누적 24 생성/72 요약/25 논리 전달/100 part/300 POST, 수동 retry action 1회는 자동 초기화되지 않는다. subprocess 종료의 bounded 정리 시간은 최대 4초이며 외부 요청이 이미 처리·과금되었는지는 보장하지 않는다. 정확히 한 번 전달 또는 US$5 총액 차단을 이 기능만으로 주장하지 않는다. generation worker는 동작 상한/취소 시 종료되어 이후 요청을 계속하는 thread를 남기지 않는다.
+운영 제약: 전용 전달 coordinator 동작(명시 regenerate/retry 포함)에 대한 DB 전체 누적 24 생성/72 요약/25 논리 전달/100 part/300 POST, 수동 retry action 1회는 자동 초기화되지 않는다. 독립 CLI preview는 원장을 쓰지 않으므로 이 전달 계수에 포함되지 않는다. preview의 수집·요약 비용과 검색·대화 모델·오케스트레이션을 포함한 총비용 강제 차단은 #7 budget preflight에서 별도 검증해야 한다. subprocess 종료의 bounded 정리 시간은 최대 4초이며 외부 요청이 이미 처리·과금되었는지는 보장하지 않는다. 정확히 한 번 전달 또는 US$5 총액 차단을 이 기능만으로 주장하지 않는다. generation worker는 동작 상한/취소 시 종료되어 이후 요청을 계속하는 thread를 남기지 않는다.

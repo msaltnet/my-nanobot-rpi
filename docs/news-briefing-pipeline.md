@@ -232,9 +232,10 @@ SQLite DB 기본 경로는 `~/.nanobot/workspace/msalt.db`다.
 | 브리핑 | 후보 기사 기준 |
 | --- | --- |
 | 아침 | 전날 19:00 KST 이후 |
-| 저녁 | 당일 07:00 KST 이후 |
+| 점심 | 당일 07:00 KST 이후 |
+| 저녁 | 당일 14:00 KST 이후 |
 
-이 시간창은 아침/저녁이 서로 같은 기사 풀을 과하게 공유하지 않도록 나눈다. 여기에 URL 사용 이력까지 더해져 같은 URL 반복을 막는다.
+이 시간창은 아침·점심·저녁이 서로 같은 기사 풀을 과하게 공유하지 않도록 나눈다. 여기에 URL 사용 이력까지 더해져 같은 URL 반복을 막는다.
 
 `published_at`이 없는 기사는 기본 브리핑 후보에서 제외된다. 이유는 RSS나 HTML 목록이 오래된 기사를 다시 노출할 수 있기 때문이다. 단, 검색 API/fallback 소스에서 `assume_current_if_missing: true`인 경우 수집 시각을 `published_at`으로 채워 브리핑 후보에 들어갈 수 있다.
 
@@ -304,7 +305,7 @@ my-nanobot-rpi news briefing
 my-nanobot-rpi news briefing evening
 ```
 
-주의: 수동 브리핑도 기본적으로 `news_briefed_articles`에 사용 URL을 기록한다. 운영 확인만 하면서 기록을 남기고 싶지 않다면 코드 레벨에서 `BriefingGenerator.format_briefing(mark_as_briefed=False)`를 써야 한다. CLI에는 이 옵션이 노출되어 있지 않다.
+수동 CLI 브리핑은 항상 미전송 미리보기이며 `news_briefed_articles`를 쓰지 않는다. 기존 `mark_as_briefed=True` 인자를 전달해도 동일하다. 미리보기에는 별도 dry-run 플래그가 필요하지 않다. 실제 전달 확정은 전용 원장의 모든 part API ACK와 최종 SQLite transaction으로만 수행한다.
 
 ### rpi 서비스 재시작
 
@@ -320,8 +321,8 @@ systemctl --no-pager --lines=20 status my-nanobot-rpi.service
 
 확인할 것:
 
-1. DB에 `news_briefed_articles` 테이블이 있는지 확인
-2. 브리핑이 `format_briefing(mark_as_briefed=True)`로 실행되는지 확인
+1. `news delivery list/show`로 해당 슬롯의 원장 상태·part별 API ACK·최종 확정을 확인
+2. 미리보기 반복은 이력을 확정하지 않는 정상 동작이다. 정기 작업이 전용 `news_briefing` 도구를 한 번 호출하는지 확인
 3. 같은 내용이지만 URL이 다른 기사인지 확인
 4. `sources.json`의 search/fallback이 같은 기사에 다른 tracking URL을 붙이는지 확인
 
@@ -370,7 +371,7 @@ python -m ruff check msalt/news msalt/storage.py msalt/cli.py tests/msalt/news t
 - 수집 오케스트레이션과 중복 URL 처리
 - `news_articles`, `news_briefed_articles` 스키마와 마이그레이션
 - 브리핑 중복 URL 제외
-- 아침/저녁 시간창 분리
+- 아침·점심·저녁 시간창 분리
 - LLM 호출 성공/실패 fallback
 
 ## 현재 한계와 개선 후보
@@ -379,7 +380,7 @@ python -m ruff check msalt/news msalt/storage.py msalt/cli.py tests/msalt/news t
 - HTML fallback은 본문을 읽지 않고 목록 링크만 읽는다.
 - 검색 API 결과는 provider 품질에 따라 경제 뉴스가 아닌 페이지가 섞일 수 있다.
 - 브리핑 후보 선택은 카테고리별 최신순 최대 10개이며 중요도 랭킹은 없다.
-- 수동 CLI 브리핑에는 `mark_as_briefed=False` 옵션이 없다.
+- 수동 CLI 브리핑은 미전송 미리보기이며 전달 재시도 권한을 제공하지 않는다.
 - `news_briefed_articles` 이력 보존 기간 제한이 없다.
 
 다음 개선 후보:
@@ -388,8 +389,7 @@ python -m ruff check msalt/news msalt/storage.py msalt/cli.py tests/msalt/news t
 - 제목 유사도 기반 중복 제거
 - 검색 API 결과 도메인 allow/deny list
 - 브리핑 중요도 랭킹
-- 오래된 `news_briefed_articles` 이력 정리 job
-- CLI에 dry-run 브리핑 옵션 추가
+- 이력 보존 정책 변경은 별도 설계 승인 대상이며 현재 자동 삭제·정리 job은 없다.
 
 
 ## 전달 원장과 자원 상한
@@ -413,12 +413,15 @@ unknown/failed/포기/사람이 수신 확인한 기사의 예약은 자동으�
 요약 OpenAI는 max_retries=0, 요청 timeout은 최대 10초와 남은 시간 중 작은 값이다.
 Telegram은 timeout 10초, transport retries=0, redirect 및 환경 proxy 전달 비활성이다.
 
-현재 단일 사용자 DB 전체에 누적 생성 24회, 요약 72회(생성당 최대 3회), 논리 전달 25회,
+전용 전달 coordinator의 동작(명시적 regenerate/retry 포함)에 대해 단일 사용자 DB 전체 누적
+생성 24회, 요약 72회(생성당 최대 3회), 논리 전달 25회,
 새 part 100개, POST attempt 300회, 명시 수동 retry action 1회를 원자적으로 제한한다.
 수동 재생성은 생성/요약/part 비용을 다시 쓰며, 일반 retry는 저장 본문만 사용하고 생성하지 않는다.
 이 값은 날짜·재시작으로 초기화되지 않고 자동 삭제/리셋 명령도 없다. 운영 창 갱신은 별도 계획 대상이다.
-계수는 외부 실행 전 보수적으로 소비되어 실제 요청 수보다 많을 수 있다. 검색·대화 모델·
-오케스트레이션까지 포함한 US$5 강제 비용 차단 및 실제 운영 허용은 #7 preflight의 별도 계약이다.
+계수는 외부 실행 전 보수적으로 소비되어 실제 요청 수보다 많을 수 있다. 독립 CLI 미리보기는
+원장을 변경하지 않으므로 이 전달 예산 계수에 포함되지 않는다. 미리보기의 수집·요약 비용,
+검색·대화 모델·오케스트레이션까지 포함한 US$5 강제 비용 차단 및 실제 운영 허용은 #7 preflight의
+별도 계약이며 여기의 소프트웨어 계수로 보장하지 않는다.
 이 원장의 요청 수 한도가 금액 보장이나 exactly-once 전달 보장은 아니다.
 
 ## 운영자 복구와 롤백

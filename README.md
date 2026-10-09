@@ -93,6 +93,7 @@ flowchart TD
     end
 
     Telegram <--> Gateway
+    News -->|전용 sender · ACK 원장| Telegram
     Dispatcher --> Telegram
     Tracking -->|답변 키보드| Telegram
     Gateway <--> LLM
@@ -150,7 +151,7 @@ my-nanobot-rpi/
 │   │   ├── official.py             # 공식 기관 피드 수집
 │   │   ├── search.py               # Tavily/Brave 검색 수집
 │   │   ├── fallback.py             # HTML/sitemap 보완 수집
-│   │   ├── briefing.py             # 카테고리별 요약과 브리핑 이력 관리
+│   │   ├── briefing.py             # 카테고리별 요약·미전송 미리보기
 │   │   ├── smoke.py                # 소스 연결 진단
 │   │   ├── cli.py                  # collect/briefing/search 명령
 │   │   └── sources.json            # 뉴스 소스별 수집 설정
