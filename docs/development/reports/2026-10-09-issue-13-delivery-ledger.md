@@ -46,7 +46,7 @@ Windows linked worktree Git에는 process-local `GIT_WORK_TREE`를 해당 checko
 
 ### Result
 
-제품 코드 SHA에 대한 **Implementer 자체 테스트 PASS**. 전체 Issue 및 PR 생성 Gate는 독립 Tester/Reviewer, Linux CI 및 필요한 Human 승인까지 **BLOCKED**다. 소스·테스트 수정이 생기면 영향 범위를 다시 검증한다.
+제품 코드 SHA에 대한 **Implementer 자체 테스트 PASS**. 최초 PR 생성의 Agent Gate는 독립 Tester PASS와 Reviewer PASS이며, 이 자체 보고서 작성 시점에는 별도 결과 기록을 기다린다. Linux Python 3.11/3.12 CI는 후보 PR에서 확인하고, 운영 실행·실수신 수용·Human Review·명시적 병합 승인은 후속 Gate다. 미실행 운영 검증과 전체 AC7은 **BLOCKED**로 유지하며 최초 PR 생성의 선행 조건으로 혼동하지 않는다. 소스·테스트 수정이 생기면 영향 범위를 다시 검증한다.
 
 ## Agent Review Report
 
