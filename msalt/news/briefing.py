@@ -1,4 +1,6 @@
 import logging
+import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -38,6 +40,12 @@ SYSTEM_PROMPT = (
 )
 
 
+@dataclass(frozen=True)
+class GeneratedBriefing:
+    text: str
+    urls: tuple[str, ...]
+
+
 class BriefingGenerator:
     """수집된 뉴스를 카테고리별 LLM 요약 + 원문 링크로 정리한 브리핑 텍스트를 생성한다."""
 
@@ -47,10 +55,14 @@ class BriefingGenerator:
         *,
         use_llm: bool = True,
         model: str = DEFAULT_MODEL,
+        before_summary=None,
+        deadline: float | None = None,
     ):
         self.storage = storage
         self.use_llm = use_llm
         self.model = model
+        self.before_summary = before_summary
+        self.deadline = deadline
 
     def get_articles_for_briefing(
         self,
@@ -59,6 +71,7 @@ class BriefingGenerator:
         require_published_at: bool = True,
         exclude_briefed: bool = True,
         since_date: str | None = None,
+        exclude_reserved: bool = True,
     ) -> list[dict]:
         """``hours`` 시간 이내 기사를 반환.
 
@@ -76,6 +89,12 @@ class BriefingGenerator:
         if exclude_briefed:
             articles = self._exclude_briefed_articles(articles)
 
+        if exclude_reserved:
+            from msalt.news.delivery import DeliveryLedger
+            db_path = getattr(self.storage, 'db_path', None)
+            if isinstance(db_path, (str, bytes)):
+                reserved = DeliveryLedger(db_path).reserved_urls()
+                articles = [a for a in articles if a['url'] not in reserved]
         seen_urls = set()
         unique = []
         for article in articles:
@@ -84,32 +103,26 @@ class BriefingGenerator:
                 unique.append(article)
         return unique
 
-    def format_briefing(self, time_of_day: str = "morning", *, mark_as_briefed: bool = True) -> str:
+    def format_briefing(self, time_of_day: str = "morning", *, mark_as_briefed: bool = False) -> str:
         articles = self.get_articles_for_briefing(
             since_date=_briefing_since_utc(time_of_day)
         )
+        # The legacy mark keyword is accepted but never mutates delivery history.
+        return self.render_articles(articles, time_of_day).text
+
+    def render_articles(self, articles, time_of_day='morning') -> GeneratedBriefing:
         label = BRIEFING_LABELS[time_of_day]
-
-        if not articles:
-            return f"{label} 경제 브리핑 - 수집된 뉴스가 없습니다."
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        lines = [f"{label} 경제 브리핑 ({today})", ""]
+        lines = [f"{label} 경제 브리핑 ({datetime.now(BRIEFING_TZ):%Y-%m-%d})", ""]
         rendered_urls = []
-
         for category in CATEGORY_ORDER:
-            bucket = [a for a in articles if a["category"] == category][:MAX_ARTICLES_PER_CATEGORY]
+            bucket = [a for a in articles if a['category'] == category][:MAX_ARTICLES_PER_CATEGORY]
             if not bucket:
                 continue
-            lines.append(f"[{CATEGORY_LABELS[category]}]")
-            lines.append(self._render_category(bucket))
-            lines.append("")
-            rendered_urls.extend(a["url"] for a in bucket)
-
-        text = "\n".join(lines).rstrip() + "\n"
-        if mark_as_briefed:
-            self.storage.mark_articles_briefed(rendered_urls, f"{today}:{time_of_day}")
-        return text
+            lines.extend([f"[{CATEGORY_LABELS[category]}]", self._render_category(bucket), ""])
+            rendered_urls.extend(a['url'] for a in bucket)
+        if not rendered_urls:
+            return GeneratedBriefing(f"{label} 경제 브리핑 - 수집된 뉴스가 없습니다.", ())
+        return GeneratedBriefing("\n".join(lines).rstrip() + "\n", tuple(rendered_urls))
 
     def _exclude_briefed_articles(self, articles: list[dict]) -> list[dict]:
         urls = [a["url"] for a in articles if a.get("url")]
@@ -134,9 +147,14 @@ class BriefingGenerator:
             logger.warning("openai package not available; falling back to plain listing")
             return None
 
+        if self.before_summary is not None:
+            self.before_summary()  # Durable quota/fence failure must not be swallowed.
+        remaining = 10.0 if self.deadline is None else min(10.0, self.deadline - time.monotonic())
+        if remaining <= 0:
+            raise TimeoutError('generation deadline exceeded')
         user_content = _build_user_prompt(articles)
         try:
-            client = OpenAI()
+            client = OpenAI(max_retries=0, timeout=remaining)
             resp = client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -145,8 +163,8 @@ class BriefingGenerator:
                 ],
             )
             return resp.choices[0].message.content.strip()
-        except Exception as e:
-            logger.warning("LLM summarization failed, falling back: %s", e)
+        except Exception:
+            logger.warning("LLM summarization failed; using plain listing")
             return None
 
 

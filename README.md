@@ -187,10 +187,11 @@ git clone --recursive https://github.com/msaltnet/my-nanobot-rpi.git
 cd my-nanobot-rpi
 
 # 기존 클론이면 submodule 초기화
+git submodule sync --recursive
 git submodule update --init --recursive
 
 # 2. 설치 (nanobot + msalt)
-pip install -e ./nanobot      # upstream nanobot 프레임워크
+pip install -e ./nanobot      # 검증된 관리 fork immutable pin
 pip install -e .              # my-nanobot-rpi
 
 # 3. 환경 변수 설정
@@ -208,16 +209,14 @@ cp .env.example .env
 my-nanobot-rpi
 ```
 
-### nanobot 업데이트
+### nanobot 의존성 고정
 
-```bash
-cd nanobot
-git fetch origin
-git checkout v0.x.x           # 원하는 버전 태그
-cd ..
-git add nanobot
-git commit -m "chore: update nanobot submodule to vX.X.X"
-```
+뉴스 전달 소유권 API v1은 [관리 fork](https://github.com/msaltnet/nanobot)의
+`13c7435eb85577d3004ee4bbee5fcb4fbdcc203d`에 고정한다. 루트 gitlink와 함께 설치하며
+임의 upstream 태그로 교체하지 않는다. 기존 클론은 위 `submodule sync`를 먼저 실행한다.
+API가 없거나 실행 턴에서 소유권을 확보하지 못하면 뉴스 도구는 외부 작업 없이 종료한다.
+이전 pin `1bb712d3488915ca4ed9ccc1a93067ff722f5ab9`으로 코드 복귀할 때는
+뉴스 예약을 중지한 상태를 유지하고 현재 DB를 보존한다. [복구 절차](docs/news-briefing-pipeline.md#운영자-복구와-롤백)를 따른다.
 
 **서브커맨드**
 
@@ -225,7 +224,8 @@ git commit -m "chore: update nanobot submodule to vX.X.X"
 my-nanobot-rpi               # 게이트웨이 기동 (기본)
 my-nanobot-rpi doctor        # .env · config · RSS 연결 점검
 my-nanobot-rpi news collect  # 수동 수집
-my-nanobot-rpi news briefing morning
+my-nanobot-rpi news briefing morning  # 미전송 미리보기: 이력 확정 없음
+my-nanobot-rpi news delivery list     # 읽기 전용 상태 조회
 my-nanobot-rpi news search 금리
 ```
 

@@ -361,11 +361,17 @@ def news_collect() -> None:
     console.print(run_collect())
 
 
-@news_app.command("briefing", help="아침/점심/저녁 브리핑 한 번 생성.")
+@news_app.command("briefing", help="아침/점심/저녁 미전송 브리핑 미리보기 (이력 확정 없음).")
 def news_briefing(time_of_day: str = typer.Argument("morning", help="morning, afternoon 또는 evening")) -> None:
     _load_dotenv()
     from msalt.news.cli import run_briefing
     console.print(run_briefing(time_of_day))
+
+
+@news_app.command("delivery", context_settings={"allow_extra_args": True, "ignore_unknown_options": True}, help="전달 원장 list/show/retry/resolve/regenerate (운영자 전용).")
+def news_delivery(ctx: typer.Context) -> None:
+    from msalt.news.delivery_cli import run_command
+    raise typer.Exit(code=run_command(ctx.args))
 
 
 @news_app.command("search", help="수집된 뉴스에서 키워드 검색.")
