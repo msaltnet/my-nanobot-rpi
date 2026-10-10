@@ -20,3 +20,5 @@ Issue #2의 유일한 상태 라벨을 Ready for Implementation으로 적용했�
 - [뉴스 후보 운영 사전 검증](2026-10-09-news-operations-preflight.md): 실제 DB 읽기 사본의 보존·migration·구코드 호환·격리 복구. 당시 비용 enforcement BLOCKED는 2026-10-10 Human 보류 결정으로 선행 조건에서 제외. 최신 후보 검수·별도 실행 승인·실수신 관찰은 필요하다.
 
 - [생활 기록 오프라인 검증](2026-10-09-tracking-validation.md): Issue #8 승인 v1의 합성 SQLite/fake 경계, 신규 23개 및 전체 223개 구현자 검증. 실제 대화·수신·후속 수정·운영 관찰은 미완료. 최종 후보의 독립 Tests/Review와 결함 Issue 연결은 PR에 기록한다.
+
+- [뉴스 최신 main 통합 검증 준비](2026-10-10-news-integration-preparation.md): 제품4cacca2 전체344/ownership43 독립 Tests 및 독립 Review PASS, 비용 보류 결정 정합화. 실제 운영/실수신·Human 수용은 미실행.
