@@ -12,84 +12,96 @@ class Storage:
         """모든 테이블을 생성한다."""
         Path(self.db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS news_articles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source TEXT NOT NULL,
-                title TEXT NOT NULL,
-                url TEXT UNIQUE NOT NULL,
-                summary TEXT,
-                category TEXT,
-                collected_at TEXT NOT NULL DEFAULT (datetime('now')),
-                published_at TEXT
-            );
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            schema = """
+                CREATE TABLE IF NOT EXISTS news_articles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    url TEXT UNIQUE NOT NULL,
+                    summary TEXT,
+                    category TEXT,
+                    collected_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    published_at TEXT
+                );
 
-            CREATE TABLE IF NOT EXISTS news_briefed_articles (
-                article_url TEXT PRIMARY KEY,
-                briefing_label TEXT NOT NULL,
-                briefed_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
+                CREATE TABLE IF NOT EXISTS news_briefed_articles (
+                    article_url TEXT PRIMARY KEY,
+                    briefing_label TEXT NOT NULL,
+                    briefed_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
 
-            CREATE TABLE IF NOT EXISTS tracked_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                schema TEXT NOT NULL,
-                unit TEXT,
-                schedule_time TEXT NOT NULL,
-                frequency TEXT NOT NULL DEFAULT 'daily',
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                last_missed_asked_date TEXT,
-                pending_since TEXT,
-                pending_recorded_for TEXT,
-                last_asked_at TEXT
-            );
+                CREATE TABLE IF NOT EXISTS tracked_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    schema TEXT NOT NULL,
+                    unit TEXT,
+                    schedule_time TEXT NOT NULL,
+                    frequency TEXT NOT NULL DEFAULT 'daily',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    last_missed_asked_date TEXT,
+                    pending_since TEXT,
+                    pending_recorded_for TEXT,
+                    last_asked_at TEXT
+                );
 
-            CREATE TABLE IF NOT EXISTS records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id INTEGER NOT NULL REFERENCES tracked_items(id) ON DELETE CASCADE,
-                recorded_for TEXT NOT NULL,
-                recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
-                value_text TEXT,
-                value_num REAL,
-                value_bool INTEGER,
-                value_json TEXT,
-                raw_input TEXT NOT NULL,
-                UNIQUE(item_id, recorded_for)
-            );
+                CREATE TABLE IF NOT EXISTS records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id INTEGER NOT NULL REFERENCES tracked_items(id) ON DELETE CASCADE,
+                    recorded_for TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    value_text TEXT,
+                    value_num REAL,
+                    value_bool INTEGER,
+                    value_json TEXT,
+                    raw_input TEXT NOT NULL,
+                    UNIQUE(item_id, recorded_for)
+                );
 
-            CREATE INDEX IF NOT EXISTS idx_records_for ON records(recorded_for);
-            CREATE INDEX IF NOT EXISTS idx_records_item ON records(item_id, recorded_for DESC);
-            CREATE INDEX IF NOT EXISTS idx_news_briefed_at
-                ON news_briefed_articles(briefed_at DESC);
-        """)
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(tracked_items)")}
-        if "last_missed_asked_date" not in cols:
-            conn.execute(
-                "ALTER TABLE tracked_items ADD COLUMN last_missed_asked_date TEXT"
-            )
-            cols.add("last_missed_asked_date")
-        if "pending_since" not in cols:
-            conn.execute(
-                "ALTER TABLE tracked_items ADD COLUMN pending_since TEXT"
-            )
-            cols.add("pending_since")
-        if "pending_recorded_for" not in cols:
-            conn.execute(
-                "ALTER TABLE tracked_items ADD COLUMN pending_recorded_for TEXT"
-            )
-            cols.add("pending_recorded_for")
-        if "last_asked_at" not in cols:
-            conn.execute(
-                "ALTER TABLE tracked_items ADD COLUMN last_asked_at TEXT"
-            )
-        record_cols = {row[1] for row in conn.execute("PRAGMA table_info(records)")}
-        if "value_json" not in record_cols:
-            conn.execute("ALTER TABLE records ADD COLUMN value_json TEXT")
-        article_cols = {row[1] for row in conn.execute("PRAGMA table_info(news_articles)")}
-        if "published_at" not in article_cols:
-            conn.execute("ALTER TABLE news_articles ADD COLUMN published_at TEXT")
-        conn.commit()
-        conn.close()
+                CREATE INDEX IF NOT EXISTS idx_records_for ON records(recorded_for);
+                CREATE INDEX IF NOT EXISTS idx_records_item ON records(item_id, recorded_for DESC);
+                CREATE INDEX IF NOT EXISTS idx_news_briefed_at
+                    ON news_briefed_articles(briefed_at DESC);
+            """
+            for statement in schema.split(";"):
+                if statement.strip():
+                    conn.execute(statement)
+            from msalt.news.delivery_schema import migrate
+            migrate(conn)
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(tracked_items)")}
+            if "last_missed_asked_date" not in cols:
+                conn.execute(
+                    "ALTER TABLE tracked_items ADD COLUMN last_missed_asked_date TEXT"
+                )
+                cols.add("last_missed_asked_date")
+            if "pending_since" not in cols:
+                conn.execute(
+                    "ALTER TABLE tracked_items ADD COLUMN pending_since TEXT"
+                )
+                cols.add("pending_since")
+            if "pending_recorded_for" not in cols:
+                conn.execute(
+                    "ALTER TABLE tracked_items ADD COLUMN pending_recorded_for TEXT"
+                )
+                cols.add("pending_recorded_for")
+            if "last_asked_at" not in cols:
+                conn.execute(
+                    "ALTER TABLE tracked_items ADD COLUMN last_asked_at TEXT"
+                )
+            record_cols = {row[1] for row in conn.execute("PRAGMA table_info(records)")}
+            if "value_json" not in record_cols:
+                conn.execute("ALTER TABLE records ADD COLUMN value_json TEXT")
+            article_cols = {row[1] for row in conn.execute("PRAGMA table_info(news_articles)")}
+            if "published_at" not in article_cols:
+                conn.execute("ALTER TABLE news_articles ADD COLUMN published_at TEXT")
+            conn.commit()
+
+        except BaseException:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _connect(self):
         conn = sqlite3.connect(self.db_path)

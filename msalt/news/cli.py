@@ -2,9 +2,9 @@
 import sys
 
 from msalt.config import MsaltConfig
-from msalt.storage import Storage
+from msalt.news.briefing import BRIEFING_LABELS, BriefingGenerator
 from msalt.news.collector import NewsCollector
-from msalt.news.briefing import BriefingGenerator
+from msalt.storage import Storage
 
 
 def _get_storage() -> Storage:
@@ -22,6 +22,8 @@ def run_collect() -> str:
 
 
 def run_briefing(time_of_day: str = "morning") -> str:
+    if time_of_day not in BRIEFING_LABELS:
+        raise ValueError('time_of_day must be morning, afternoon or evening')
     storage = _get_storage()
     collector = NewsCollector(storage=storage)
     collector.collect()
@@ -51,7 +53,10 @@ def main():
         sys.exit(1)
 
     command = sys.argv[1]
-    if command == "collect":
+    if command == "delivery":
+        from msalt.news.delivery_cli import run_command
+        sys.exit(run_command(sys.argv[2:]))
+    elif command == "collect":
         print(run_collect())
     elif command == "briefing":
         time = sys.argv[2] if len(sys.argv) > 2 else "morning"
