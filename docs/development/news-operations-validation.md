@@ -1,13 +1,16 @@
 # #7 뉴스 후보 운영 검증 실행 패키지
-[Issue #7 승인 v2](https://github.com/msaltnet/my-nanobot-rpi/issues/7)의 실행용 보존 스냅샷이다. 실제 서버/토큰/수신자/경로는 [비공개 기록](private-operations-record-template.md)에만 적는다.
+[Issue #7 승인 v2](https://github.com/msaltnet/my-nanobot-rpi/issues/7)의 실행용 체크리스트이며 아래 최신 Human 비용 결정을 반영한다. 실제 서버/토큰/수신자/경로는 [비공개 기록](private-operations-record-template.md)에만 적는다.
 [공통 runbook](operations-runbook.md), [21slot 기록 양식](news-observation-record-template.md), [검증 보고서](reports/2026-10-09-issue-7-news-operations-preparation.md)를 함께 사용한다.
 문서 작성 단계의 서버 접속·유료 API·운영 데이터 쓰기·Telegram 발송·배포는 없다.
 
+## 현재 비용 결정 — 2026-10-10 KST
+Human은 금액 상한을 사용자 각 API·서비스 설정에서 관리하고 앱 비용 제어와 새 횟수 제한은 추후 필요 시 검토하기로 결정했다. Issue #25 설계 v1/AC는 미승인·보류(Open)다. 앱 US$5 hard enforcement 증명과 #25 구현은 운영 검증 선행 조건에서 제외한다. PR #24의 기존 전달 안전성·호출 ceiling은 유지한다.
+US$5/US$4는 운영자 비용 관리·관찰 기준이며 앱 자동 차단·절대 청구 상한 보장이 아니다. 예산 확대·유료 실행 승인이 아니다. 고정 후보 검수·대상/작업창·백업/rollback·호출/발송 범위의 별도 실행 승인, smoke/7일21회 관찰·Human 수용·명시적 병합 승인 Gate는 유지한다. [현재 Issue 결정](https://github.com/msaltnet/my-nanobot-rpi/issues/7)이 과거 비용 차단 필수 문구보다 우선한다.
 ## 운영자가 PR 실행 승인 전에 채울 패키지
 1. #14/#13 현재 후보 PR·통합 candidate SHA/gitlink와 독립 Test/Review·CI를 연결한다.
 2. 이전 운영 SHA/대상/수신자/작업창/원래 unit 상태와 모든 writer·cron을 비공개로 확인한다.
 3. latest consistent backup·격리 migration/restore·구코드 호환과 현재 DB 유지 rollback 근거를 연결한다.
-4. 모델/검색 요금·토큰/iteration/retry 상한에 따른 최악 cost reservation·US$5 강제 차단 근거를 제시한다. 미입증이면 유료 실행 BLOCKED.
+4. 공급자 설정·사용량 확인 방법·운영자 비용 관찰/중단 담당과 US$5/US$4 기준을 기록한다. 앱 hard guard/비용 reservation 증명과 #25 구현은 선행 조건이 아니다.
 5. 별도 Human 실행 승인 이후만 아래 절차의 후보 배포·smoke·관찰을 수행한다.
 
 ## 승인 계약에 따른 상세 체크리스트
@@ -40,7 +43,7 @@
 | 재전송 | 확인된 미발송만 최초 포함 최대 3회; unknown 자동 재전송 0; 저장 payload만 운영자 수동 판단 | P1 “권장 정책 사용” 답변으로 검토 기준 채택. #13 전체 설계 승인은 별도 |
 | 데이터 | 기존 기사·briefed·생활 기록 보존, legacy 실수신 미확인; 소급 발송 없음; 새 원장 자동 삭제 없음 | migration/rollback 합성 검증과 최신 실제 백업·격리 복구 |
 | 운영 | 기존에 선택한 OCI 단일 Linux 호스트/현재 봇 대상 재대조, 연속 7일·세 예약 21회 | 대상은 비공개 확인, 후보 SHA·작업창 실행 승인은 PR 후. RPi 미검증 유지 |
-| 비용 | 뉴스 관련 유료 LLM/검색/오케스트레이션 합계 US$5/전체 실행창, 신규 인프라 구매 0 | 확인 가능한 사용량·최대 비용 reservation/강제 상한 없으면 유료 단계 BLOCKED |
+| 비용 | 뉴스 유료 LLM/검색/오케스트레이션 US$5 관찰 기준, 신규 인프라 구매 0 | 사용자가 각 API·서비스 설정과 사용량을 관리; 앱 금액 자동 차단 보장 없음 |
 | 발송 | 논리 전달 25회, part 100개, Telegram POST 최대 300회/전체 실행창 | 평소 목표가 아닌 ceiling. 21 정기+최대 3 smoke+명시 수동 재전송 최대 1 |
 | 정지/복귀 | 계획 작업 최대 20분, 뉴스만 중지 우선·현재 DB 보존 코드 복귀 | 데이터 백업 복원은 별도 명시 승인. 실제 복귀 지연은 숨기지 않음 |
 
@@ -58,13 +61,13 @@
 - **관찰 전체 실행창:** 연속 7일 정상 관찰 + 최대 3회 수동 smoke + 명시 수동 재전송 최대 1회. 실패 뒤 기간을 다시 잡아도 비용/발송 누적 counter를 초기화하지 않는다. 예산 확대/표본 재시작은 Human 판단이다.
 - root 뉴스 생성은 최대 **24회**(21 예약+3 smoke), 1회 collect·카테고리당 1회 summary·합계 summary 요청 **72회** 이내. 수집당 현재 설정 검색 최대 4개(Tavily 2, Brave 2), 총 **96회** 이내; 키 없는 소스는 skip이고 요청 0회. 뉴스 재전송은 새 수집/LLM 0회. 기타 RSS/official/fallback 요청은 각 설정 소스 1회/수집이고 기존 숨은 요청/중첩 fetch가 있으면 실제 경로 수를 preflight에서 대조한다. 소스 추가·독립 반복 collect를 하지 않는다.
 - **US$5 권장 상한은 현재 요금/청구액의 단정이 아니다.** 모든 뉴스 유료 검색·요약·agent turn(스킬 실행/오케스트레이션 포함)의 초기 호출·retry·실패 과금을 포함한다. 요약 72회만으로 비용 한도를 충족했다고 판단하지 않는다. 기존 다른 기능의 비용은 비교용 baseline으로 분리하고 분리가 불가능하면 같은 실행창의 공유 사용량 전체를 보수적으로 상한에 넣는다.
-- 실행 전 현재 모델/최대 토큰/agent maxToolIterations·retry·검색 요금에 근거한 **최악 비용**을 산정하고 다음 작업/진행 중 호출의 최대 비용을 reservation에 포함한다. 실제 사용량+예약 최대 비용이 US$5를 넘는 작업은 시작하지 않는다. US$4(80%)에 신규 뉴스 실행을 멈춰 여유를 둔다. 이 알림 기준만으로 hard cap을 보장하지 않는다.
-- enforcement는 실제 사용 가능한 공급자/독립 실행 제한 또는 이미 검수된 뉴스 경계 guard로 확인한다. dashboard 표시 지연/soft monthly budget를 hard cap으로 간주하지 않는다. **최악 비용 reservation/상한 차단을 입증할 수 없으면 유료 관찰은 BLOCKED**로 두고 offline/plain을 검토한다. plain도 agent/검색 비용이 있어 “무료 관찰”로 표시하지 않는다. 새 공통 비용 제어 코드가 필요하면 본 Issue에서 구현하지 않고 새 Open 설계로 분리한다.
+- 운영자는 공급자별 설정과 사용량 확인 방법을 기록하고 뉴스·검색·agent/retry/실패 과금 및 공유 소비를 관찰한다. US$4에 신규 뉴스 실행을 수동 중단하는 기준과 US$5 관리 기준을 사용한다. 실제 청구·표시 지연/미확인도 기록하며 앱의 비용 예약·자동 차단을 주장하지 않는다.
+- 금액 상한은 사용자가 각 API·서비스에서 관리한다. 앱 금액 guard·비용 예약 원장·fork 비용 capability·공유 대화/기록 차단·새 횟수 제한은 추가하지 않는다. 금액 hard enforcement 미입증만으로 운영 준비를 BLOCKED로 두지 않는다. 별도 유료 실행 승인 전에는 호출하지 않으며 plain도 agent/검색 비용이 있어 무료라고 표시하지 않는다.
 - Telegram은 #13의 part당 3,500자/최대 4part, 25 logical/100part/300 POST 전체 ceiling. 재시도·HTTP timeout·실패 시도도 POST counter에 포함한다. 1회 생성·발송 실행 최대 5분, 외부 HTTP timeout 권장 10초. LLM SDK 자동 retry와 전용 sender 숨은 retry 없이 한도를 계산한다. 너무 긴 출력/한도 초과를 조용히 truncate하지 않고 발송 전 중단한다.
 - 신규 VM/유료 모니터링/모델/소스 도입 0. 수집 병렬도를 임의 늘리지 않는다. 자원 권장 중단선: 시작 시 backup+restore 예상 용량의 2배와 **1 GiB 이상** 여유 디스크, 가용 메모리 **20% 이상**; 관찰 중 여유 디스크 **512 MiB 미만**, 가용 메모리 10% 미만이 5분 지속, OOM 또는 의도치 않은 gateway 재기동은 중지/조사. 서버 사양 때문에 충족하지 못하면 자동 완화하지 않고 운영 판단을 받는다. RPi 실제 검증은 여전히 미수행이다.
 
 ### 실행 순서 / Smoke / Dogfooding
-1. **독립 검수 후 PR Gate:** 각 Issue 승인 설계 구현·Tests/Agent Review PASS 뒤 PR 최초 생성. 최종 통합 후보 SHA와 이전 운영 SHA, 실험 수신 대상(비공개), 작업창·정지 예산·cost enforcement 근거·복귀 절차를 Human에게 제시한다. 이 계획 승인만으로 미정 후보 배포를 허용하지 않는다.
+1. **독립 검수 후 PR Gate:** 각 Issue 승인 설계 구현·Tests/Agent Review PASS 뒤 PR 최초 생성. 최종 통합 후보 SHA와 이전 운영 SHA, 실험 수신 대상(비공개), 작업창·정지 예산·운영자 비용 관리·관찰 계획·복귀 절차를 Human에게 제시한다. 이 계획 승인만으로 미정 후보 배포를 허용하지 않는다.
 2. **승인 후보 배포:** 최신 일관 백업/격리 검증 → 승인 candidate/gitlink/venv·entry point/관리 스킬/설정 적용 → migration 무결성/기존 테이블 대조 → 단일 gateway 기동. 원래 비활성 timer/job을 일괄 켜지 않는다. gateway 내부 cron과 seed 동기화가 뉴스 예약을 되살릴 수 있음을 확인한다.
 3. **수동 smoke 최대 3회:** 예약과 겹치지 않는 승인 시각에 Human이 현재 chat에서 해당 시각 뉴스 브리핑을 요청한다(아침/점심/저녁 각 최대 1회, 테스트 때문에 날짜 경계를 변조하지 않는다). 잘못된 시각의 slot을 임의 호출하지 않는다. 각 tool 1회·collect 경계 1회·선택 URL/본문 hash·LLM/plain·part별 API 응답/DB 최종 상태·Human 화면 실제 수신을 대조한다. 실제 failed/unknown을 고의 유발하거나 테스트 메시지를 운영 DB에 넣지 않는다. 3회는 상한이고 경로 중복이면 최소 표본을 사용한다.
 4. **7일 실제 예약 관찰:** 후보/대상/설정이 고정된 7일 연속(07:00·14:00·20:00 KST 총 21예정)을 관찰한다. 관찰 시작/종료·KST/UTC를 기록하고 각 예약의 예정 → 실행 → 생성 → 발송 시도/API ACK → 원장 commit → Human 실수신을 별도 열로 남긴다. 받지 못한 메시지를 API ok로 PASS 처리하지 않는다. Human은 각 slot의 수신 여부와 중복·원문 유용성을 확인한다.
@@ -88,7 +91,7 @@
 | AC3 | 세 cron 설정만 PASS | 7일 21개 예정 각각 실행/생성/part ACK/원장/Human 실수신 표. 권장 허용: 예상 10분 이내 21/21 실수신, 잘못된 대상/중복 0 |
 | AC4 | 기존 pre-send mark·upstream retry 한계 재현 | #13 정책/경계 테스트·Human P1·실제 성공 경로. 자연 장애 표본 없으면 live 장애 재전송 PASS 대신 N/A+합성 근거 |
 | AC5 | #13/#14 Open 결함 분리 | 두 승인 설계의 최종 현재 SHA 독립 Tests/Review·후보 배포·수집 1회/전달 상태·Human 실사용 수용 |
-| AC6 | v1 외부 영향 0 | 승인 대상·기간·비용/발송 ceiling/enforcement·최신 백업/rollback·실제 usage/금액·자원·최종 제한 수용 |
+| AC6 | v1 외부 영향 0 | 승인 대상·기간·운영자 비용 관리·발송/호출 ceiling·최신 백업/rollback·실제 usage/금액·자원·최종 제한 수용 |
 
 7일 21/21 미달을 Agent가 허용치로 바꿔 PASS 처리하지 않는다. Human이 부분 결과/제한을 수용하면 그 기준과 남은 Open 후속 항목을 명시하고 원래 AC 결과는 보존한다.
 산출물: 새 `docs/development/reports/` 운영 검증 보고서·색인, 비공개 실행 기록, 필요한 최소 runbook의 사실 정정. 제품 코드/새 자동화/예약 runner 구현은 #7 범위 밖이다. Issue별 격리 `codex/issue-7-news-operations-validation` 또는 동일 Issue 열린 후속 PR을 재사용한다. #15는 merged라 재사용하지 않는다.

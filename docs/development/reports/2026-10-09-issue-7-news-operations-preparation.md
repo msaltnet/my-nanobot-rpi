@@ -1,4 +1,10 @@
 # Verification Report — #7 v2 운영 검증 준비
+
+## 현재 비용 결정 — 2026-10-10 KST
+Human은 금액 상한을 사용자 각 API·서비스 설정에서 관리하고 앱 비용 제어와 새 횟수 제한은 추후 필요 시 검토하기로 결정했다. Issue #25 설계 v1/AC는 미승인·보류(Open)다. 앱 US$5 hard enforcement 증명과 #25 구현은 운영 검증 선행 조건에서 제외한다. PR #24의 기존 전달 안전성·호출 ceiling은 유지한다.
+US$5/US$4는 운영자 비용 관리·관찰 기준이며 앱 자동 차단·절대 청구 상한 보장이 아니다. 예산 확대·유료 실행 승인이 아니다. 고정 후보 검수·대상/작업창·백업/rollback·호출/발송 범위의 별도 실행 승인, smoke/7일21회 관찰·Human 수용·명시적 병합 승인 Gate는 유지한다. [현재 Issue 결정](https://github.com/msaltnet/my-nanobot-rpi/issues/7)이 과거 비용 차단 필수 문구보다 우선한다.
+이하 2026-10-09 검증 명령·판정·SHA는 당시 이력으로 보존한다. 과거 PASS를 현재 통합 후보 PASS로 재사용하지 않는다. 당시 비용 guard 부족을 사유로 한 BLOCKED는 현재 실행 조건이 아니다. 최신 후보·백업·운영 승인과 실제 관찰은 여전히 별도 확인 대상이다.
+
 ## Context
 - 승인 설계: [#7 v2](https://github.com/msaltnet/my-nanobot-rpi/issues/7). 2026-10-09 KST Human 직접 채팅에서 #13 v1/#14 v1/#7 v2 본문의 설계·AC 승인.
 - 브랜치: codex/issue-7-news-operations-validation. 기준 main 96f8b344519494cea5fd127dbe8818404fce3182; 최종 candidate SHA는 연결 PR에서 고정한다.
