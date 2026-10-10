@@ -18,6 +18,7 @@ from nanobot.session.manager import SessionManager
 
 from msalt.storage import Storage
 from msalt.tracking.cli import _make_telegram_sender, run_command
+from msalt.tracking.delivery_errors import DeliveryRejected, DeliveryUnknown
 from msalt.tracking.dispatcher import Dispatcher
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.parser import NaturalLanguageParser
@@ -421,7 +422,7 @@ def test_schedule_window_timezone_and_exclusive_start(tracking, now, expected):
 
 
 @pytest.mark.parametrize("status,ok", [(401, False), (200, False)])
-def test_sender_records_rejected_http_response_as_outbound(
+def test_sender_rejection_keeps_outbound_and_pending_unset(
     tracking, tmp_path, monkeypatch, status, ok
 ):
     _, store, items, records = tracking
@@ -433,15 +434,16 @@ def test_sender_records_rejected_http_response_as_outbound(
         "post",
         lambda *args, **kwargs: SimpleNamespace(status_code=status, json=lambda: {"ok": ok}),
     )
-    messages = Dispatcher(items, records, _make_telegram_sender(workspace)).run(
-        datetime(2026, 10, 9, 8, 0, tzinfo=KST)
-    )
+    with pytest.raises(DeliveryRejected):
+        Dispatcher(items, records, _make_telegram_sender(workspace)).run(
+            datetime(2026, 10, 9, 8, 0, tzinfo=KST)
+        )
     history = SessionManager(workspace).get_or_create("telegram:123").get_history()
-    assert len(messages) == 1
-    assert "운동" in history[-1]["content"]
+    assert history == []
     item = store.get_tracked_item_by_name("운동")
-    assert item["pending_recorded_for"] == "2026-10-09"
-    assert item["last_asked_at"] is not None
+    assert item["pending_since"] is None
+    assert item["pending_recorded_for"] is None
+    assert item["last_asked_at"] is None
 
 
 def test_sender_timeout_does_not_record_outbound(tracking, tmp_path, monkeypatch):
@@ -453,6 +455,6 @@ def test_sender_timeout_does_not_record_outbound(tracking, tmp_path, monkeypatch
         raise httpx.TimeoutException("synthetic timeout")
 
     monkeypatch.setattr(httpx, "post", timeout)
-    with pytest.raises(httpx.TimeoutException):
+    with pytest.raises(DeliveryUnknown):
         _make_telegram_sender(workspace)("synthetic timeout")
     assert SessionManager(workspace).get_or_create("telegram:123").get_history() == []

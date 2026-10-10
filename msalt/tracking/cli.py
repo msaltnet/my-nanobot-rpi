@@ -13,6 +13,7 @@ import httpx
 from loguru import logger
 
 from msalt.storage import Storage
+from msalt.tracking.delivery_errors import DeliveryRejected, DeliveryUnknown
 from msalt.tracking.dispatcher import (
     Dispatcher,
     ReplyKeyboard,
@@ -101,6 +102,26 @@ def _record_outbound_in_session(workspace: Path, chat_id: str, text: str) -> Non
     manager.save(session)
 
 
+def _require_telegram_ack(response: object) -> None:
+    """Accept only a 2xx Bot API object with boolean true; classify other outcomes."""
+    try:
+        status = response.status_code
+        body = response.json()
+    except Exception:
+        raise DeliveryUnknown("Telegram delivery outcome unknown") from None
+    if isinstance(body, dict) and body.get("ok") is False:
+        raise DeliveryRejected("Telegram rejected delivery")
+    if (
+        isinstance(status, int)
+        and not isinstance(status, bool)
+        and 200 <= status < 300
+        and isinstance(body, dict)
+        and body.get("ok") is True
+    ):
+        return
+    raise DeliveryUnknown("Telegram delivery outcome unknown")
+
+
 def _make_telegram_sender(
     workspace: Path = DEFAULT_WORKSPACE,
 ) -> Callable[[str, ReplyKeyboard | None], None]:
@@ -109,19 +130,23 @@ def _make_telegram_sender(
     url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     def send(text: str, reply_keyboard: ReplyKeyboard | None = None) -> None:
-        httpx.post(
-            url,
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "reply_markup": _make_reply_markup(reply_keyboard),
-            },
-            timeout=10,
-        )
+        try:
+            response = httpx.post(
+                url,
+                json={
+                    "chat_id": chat_id,
+                    "text": text,
+                    "reply_markup": _make_reply_markup(reply_keyboard),
+                },
+                timeout=10,
+            )
+        except Exception:
+            raise DeliveryUnknown("Telegram delivery outcome unknown") from None
+        _require_telegram_ack(response)
         try:
             _record_outbound_in_session(workspace, chat_id, text)
-        except Exception as exc:
-            logger.warning("Failed to record dispatcher message in session: {}", exc)
+        except Exception:
+            logger.warning("Telegram delivery ACKed, but session recording failed")
 
     return send
 
