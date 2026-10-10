@@ -6,25 +6,23 @@
 
 ```mermaid
 flowchart TD
-    Cron["nanobot cron<br/>07:00 / 14:00 / 20:00 KST"] --> Skill["news-briefing skill"]
-    Skill --> CollectCmd["my-nanobot-rpi news collect"]
-    CollectCmd --> Collector["NewsCollector"]
-    Collector --> RSS["RSS feeds"]
-    Collector --> Official["Official feeds"]
-    Collector --> Search["Search APIs<br/>Tavily / Brave"]
-    Collector --> Fallback["HTML / sitemap fallback"]
-    RSS --> DB["SQLite msalt.db<br/>news_articles"]
-    Official --> DB
-    Search --> DB
-    Fallback --> DB
-    Skill --> BriefingCmd["my-nanobot-rpi news briefing morning/evening"]
-    BriefingCmd --> Generator["BriefingGenerator"]
-    DB --> Generator
-    Generator --> Used["news_briefed_articles<br/>이미 브리핑한 URL 제외"]
-    Generator --> Telegram["Telegram delivery"]
+    Cron["07 / 14 / 20 KST"] --> Skill["news-briefing: 도구 1회"]
+    Skill --> Tool["news_briefing: 현재 턴 소유권"]
+    Tool --> Claim["SQLite 슬롯·예산 claim"]
+    Claim --> Collect["별도 프로세스: collect 1회"]
+    Collect --> Generate["카테고리 최대 10개 예약·요약"]
+    Generate --> Snapshot["불변 본문 + 정확한 URL + 최대 4 part"]
+    Snapshot --> API["전용 Bot API sender"]
+    API --> ACK["part별 실제 message_id ACK"]
+    ACK --> Final["전체 ACK 후 원자적 briefed 확정"]
+    API --> Unknown["불확실/부분 발송: unknown, 자동 재전송 중지"]
 ```
 
-정기 브리핑은 nanobot cron이 `news-briefing` 스킬을 실행하면서 시작된다. 스킬은 먼저 수집 명령을 실행하고, 그 다음 브리핑 생성 명령을 실행한다.
+정기 스킬은 `news_briefing(time_of_day=...)`만 한 번 호출한다. 도구가 반환하는 상태와
+식별자는 전달 본문이 아니며 일반 응답/message 도구로 복사하지 않는다. 호출 시점에
+등록된 공개 API v1, 현재 Telegram 대상·thread·turn, allowFrom 및 TELEGRAM_USER_ID를
+대조한다. 선행 발송/쓰기 가능 도구가 있거나 소유권을 확보하지 못하면 새 뉴스 외부 작업은 0회다.
+소유권은 ACK가 아니며 사용자 턴과 cron SYSTEM 턴의 기본 응답을 종료시킨다.
 
 ## 주요 파일
 
@@ -37,7 +35,12 @@ flowchart TD
 | `msalt/news/search.py` | Tavily, Brave Search API 기반 보강 수집 |
 | `msalt/news/fallback.py` | RSS가 놓친 기사를 HTML 목록 또는 sitemap에서 보강 수집 |
 | `msalt/news/briefing.py` | 수집된 기사로 아침/저녁 브리핑 생성 |
-| `msalt/news/cli.py` | `collect`, `briefing`, `search` 내부 실행 함수 |
+| `msalt/news/cli.py` | 독립 collect, 미전송 preview, search |
+| `msalt/news/reply_tool.py` | exclusive news_briefing entry point·대상 검증 |
+| `msalt/news/coordinator.py` | 종료 가능한 생성 프로세스·단일 실행 상한 |
+| `msalt/news/delivery.py` | 원장·예산·예약·fencing·ACK transaction |
+| `msalt/news/sender.py` | 저장된 part만 Bot API 전송 |
+| `msalt/news/delivery_cli.py` | 운영자 조회·수동 복구 |
 | `msalt/news/smoke.py` | 실제 외부 소스 연결 진단 |
 | `msalt/storage.py` | SQLite 테이블 생성, 기사 저장, 브리핑 사용 이력 저장 |
 | `msalt/skills/news/SKILL.md` | 대화형 뉴스 요청용 스킬 |
@@ -56,7 +59,7 @@ my-nanobot-rpi news briefing evening
 my-nanobot-rpi news search "금리"
 ```
 
-중요: 스킬 문서에서는 `python -m ...` 형태를 쓰지 않는다. nanobot의 exec 환경에서 venv 밖 Python으로 풀리면 `ModuleNotFoundError`가 날 수 있기 때문에 반드시 설치된 console script인 `my-nanobot-rpi ...`를 사용한다.
+정기 스킬은 CLI를 실행하지 않고 전용 도구를 호출한다. 운영자 CLI `news briefing [morning|afternoon|evening]`은 수집 1회 후 미전송 미리보기만 반환한다. Python generator의 기존 `mark_as_briefed=True`도 전달 이력을 쓰지 않는다. `python -m msalt.news.cli` 경로도 같은 의미다. 잘못된 slot은 수집 전에 거절된다.
 
 ## 정기 실행
 
@@ -193,7 +196,7 @@ SQLite DB 기본 경로는 `~/.nanobot/workspace/msalt.db`다.
 
 ### `news_briefed_articles`
 
-이미 브리핑에 사용한 기사 URL 기록 테이블.
+기존 행은 legacy_generated(과거 생성 이력, 실제 수신 미확인)로 해석하며 소급 변경·삭제·재발송하지 않는다. 새 행은 모든 part의 실제 API ACK와 최종 transaction이 성공했을 때만 추가된다.
 
 | 컬럼 | 설명 |
 | --- | --- |
@@ -211,12 +214,12 @@ SQLite DB 기본 경로는 `~/.nanobot/workspace/msalt.db`다.
 
 1. 브리핑 시간창 계산
 2. `news_articles`에서 후보 기사 조회
-3. 이미 `news_briefed_articles`에 기록된 URL 제외
+3. 기존 briefed URL 및 다른 원장의 활성 예약 URL 제외 (unknown은 다음날도 제외)
 4. URL 기준 중복 제거
 5. 카테고리별 최대 10개 선택
 6. OpenAI로 카테고리별 요약
 7. LLM 실패 시 단순 기사 목록으로 fallback
-8. 실제 출력에 포함된 URL을 `news_briefed_articles`에 기록
+8. preview는 텍스트만 반환한다. 전달 경로는 예약된 실제 URL·본문·part hash를 먼저 저장하고, 전체 ACK 뒤 정확한 snapshot URL만 원자적으로 기록한다.
 
 브리핑 카테고리 순서:
 
@@ -229,9 +232,10 @@ SQLite DB 기본 경로는 `~/.nanobot/workspace/msalt.db`다.
 | 브리핑 | 후보 기사 기준 |
 | --- | --- |
 | 아침 | 전날 19:00 KST 이후 |
-| 저녁 | 당일 07:00 KST 이후 |
+| 점심 | 당일 07:00 KST 이후 |
+| 저녁 | 당일 14:00 KST 이후 |
 
-이 시간창은 아침/저녁이 서로 같은 기사 풀을 과하게 공유하지 않도록 나눈다. 여기에 URL 사용 이력까지 더해져 같은 URL 반복을 막는다.
+이 시간창은 아침·점심·저녁이 서로 같은 기사 풀을 과하게 공유하지 않도록 나눈다. 여기에 URL 사용 이력까지 더해져 같은 URL 반복을 막는다.
 
 `published_at`이 없는 기사는 기본 브리핑 후보에서 제외된다. 이유는 RSS나 HTML 목록이 오래된 기사를 다시 노출할 수 있기 때문이다. 단, 검색 API/fallback 소스에서 `assume_current_if_missing: true`인 경우 수집 시각을 `published_at`으로 채워 브리핑 후보에 들어갈 수 있다.
 
@@ -301,7 +305,7 @@ my-nanobot-rpi news briefing
 my-nanobot-rpi news briefing evening
 ```
 
-주의: 수동 브리핑도 기본적으로 `news_briefed_articles`에 사용 URL을 기록한다. 운영 확인만 하면서 기록을 남기고 싶지 않다면 코드 레벨에서 `BriefingGenerator.format_briefing(mark_as_briefed=False)`를 써야 한다. CLI에는 이 옵션이 노출되어 있지 않다.
+수동 CLI 브리핑은 항상 미전송 미리보기이며 `news_briefed_articles`를 쓰지 않는다. 기존 `mark_as_briefed=True` 인자를 전달해도 동일하다. 미리보기에는 별도 dry-run 플래그가 필요하지 않다. 실제 전달 확정은 전용 원장의 모든 part API ACK와 최종 SQLite transaction으로만 수행한다.
 
 ### rpi 서비스 재시작
 
@@ -317,8 +321,8 @@ systemctl --no-pager --lines=20 status my-nanobot-rpi.service
 
 확인할 것:
 
-1. DB에 `news_briefed_articles` 테이블이 있는지 확인
-2. 브리핑이 `format_briefing(mark_as_briefed=True)`로 실행되는지 확인
+1. `news delivery list/show`로 해당 슬롯의 원장 상태·part별 API ACK·최종 확정을 확인
+2. 미리보기 반복은 이력을 확정하지 않는 정상 동작이다. 정기 작업이 전용 `news_briefing` 도구를 한 번 호출하는지 확인
 3. 같은 내용이지만 URL이 다른 기사인지 확인
 4. `sources.json`의 search/fallback이 같은 기사에 다른 tracking URL을 붙이는지 확인
 
@@ -367,7 +371,7 @@ python -m ruff check msalt/news msalt/storage.py msalt/cli.py tests/msalt/news t
 - 수집 오케스트레이션과 중복 URL 처리
 - `news_articles`, `news_briefed_articles` 스키마와 마이그레이션
 - 브리핑 중복 URL 제외
-- 아침/저녁 시간창 분리
+- 아침·점심·저녁 시간창 분리
 - LLM 호출 성공/실패 fallback
 
 ## 현재 한계와 개선 후보
@@ -376,7 +380,7 @@ python -m ruff check msalt/news msalt/storage.py msalt/cli.py tests/msalt/news t
 - HTML fallback은 본문을 읽지 않고 목록 링크만 읽는다.
 - 검색 API 결과는 provider 품질에 따라 경제 뉴스가 아닌 페이지가 섞일 수 있다.
 - 브리핑 후보 선택은 카테고리별 최신순 최대 10개이며 중요도 랭킹은 없다.
-- 수동 CLI 브리핑에는 `mark_as_briefed=False` 옵션이 없다.
+- 수동 CLI 브리핑은 미전송 미리보기이며 전달 재시도 권한을 제공하지 않는다.
 - `news_briefed_articles` 이력 보존 기간 제한이 없다.
 
 다음 개선 후보:
@@ -385,5 +389,73 @@ python -m ruff check msalt/news msalt/storage.py msalt/cli.py tests/msalt/news t
 - 제목 유사도 기반 중복 제거
 - 검색 API 결과 도메인 allow/deny list
 - 브리핑 중요도 랭킹
-- 오래된 `news_briefed_articles` 이력 정리 job
-- CLI에 dry-run 브리핑 옵션 추가
+- 이력 보존 정책 변경은 별도 설계 승인 대상이며 현재 자동 삭제·정리 job은 없다.
+
+
+## 전달 원장과 자원 상한
+
+새 schema v1 테이블은 deliveries/articles/parts/attempts/budget으로 구성된다.
+기존 네 사용자 테이블은 보존한다. migration은 한 transaction이며 schema·UNIQUE·인덱스·
+외래키·CHECK 정의가 다르면 기존 파일을 변경하지 않고 거절한다. snapshot 본문·URL 목록·
+part 순서와 hash가 다르면 POST하지 않는다. 기사 예약과 예산은 네트워크 작업 전에 확정한다.
+
+`generating → prepared → sending → sent`가 기본 경로다. 빈 결과는 기존 안내를 실제 발송하고
+API ACK를 part에 기록한 뒤에도 최종 `empty`로 남는다. 같은 대상/thread/KST 날짜/slot은
+단일 delivery이며 기존 상태에서는 수집이나 재생성을 자동으로 반복하지 않는다.
+전송 전 생성 실패는 `failed`, timeout·모호한 응답·부분 발송·발송 후 저장 실패는 `unknown`이다.
+10분 lease가 만료된 generating은 failed, sending은 unknown으로 복구한다. 조회는 복구를 수행하지 않는다.
+unknown/failed/포기/사람이 수신 확인한 기사의 예약은 자동으로 다음 슬롯에 넘어가지 않는다.
+
+한 동작의 수집·생성·발송은 하나의 5분 monotonic deadline을 공유한다. 생성 프로세스는
+상한/취소 때 terminate와 bounded join(최대 2초), 필요시 kill과 bounded join(최대 2초)으로
+회수한다. 이 짧은 정리 시간에는 새 외부 작업을 시작하지 않는다. 이미 외부 서비스에 도착한
+요청의 처리·과금까지 취소되었다는 뜻은 아니다. generation/send owner는 저장 전후 fencing을 거친다.
+요약 OpenAI는 max_retries=0, 요청 timeout은 최대 10초와 남은 시간 중 작은 값이다.
+Telegram은 timeout 10초, transport retries=0, redirect 및 환경 proxy 전달 비활성이다.
+
+전용 전달 coordinator의 동작(명시적 regenerate/retry 포함)에 대해 단일 사용자 DB 전체 누적
+생성 24회, 요약 72회(생성당 최대 3회), 논리 전달 25회,
+새 part 100개, POST attempt 300회, 명시 수동 retry action 1회를 원자적으로 제한한다.
+수동 재생성은 생성/요약/part 비용을 다시 쓰며, 일반 retry는 저장 본문만 사용하고 생성하지 않는다.
+이 값은 날짜·재시작으로 초기화되지 않고 자동 삭제/리셋 명령도 없다. 운영 창 갱신은 별도 계획 대상이다.
+계수는 외부 실행 전 보수적으로 소비되어 실제 요청 수보다 많을 수 있다. 독립 CLI 미리보기는
+원장을 변경하지 않으므로 이 전달 예산 계수에 포함되지 않는다. 미리보기 비용도 운영자가 관리한다.
+2026-10-10 Human 결정에 따라 금액 상한은 사용자가 각 API·서비스 설정에서 관리한다. US$5/US$4는 운영자 관찰 기준이며 앱 자동 차단 보장이 아니다. 앱 비용 guard/#25 구현은 #7 선행 조건에서 제외하고 기존 전달 안전성·호출 ceiling은 유지한다. 실제 운영 적용·호출/발송은 고정 후보·대상·작업창·백업/rollback 범위의 별도 승인 후 수행한다.
+이 원장의 요청 수 한도가 금액 보장이나 exactly-once 전달 보장은 아니다.
+
+## 운영자 복구와 롤백
+
+도구·preview·운영자 CLI는 기존 `MsaltConfig.db_path`(기본 `~/.nanobot/workspace/msalt.db`)를
+공통 사용한다. agent workspace를 바꾸어도 DB를 암묵적으로 새 위치에 만들지 않는다.
+기존 DB 이전은 이 기능의 범위가 아니다. status 출력에는 수신 대상/thread·본문·토큰·API URL이 없다.
+
+```bash
+my-nanobot-rpi news delivery list
+my-nanobot-rpi news delivery show DELIVERY_ID
+my-nanobot-rpi news delivery retry DELIVERY_ID
+my-nanobot-rpi news delivery retry DELIVERY_ID --confirm-uncertain
+my-nanobot-rpi news delivery resolve DELIVERY_ID --received
+my-nanobot-rpi news delivery resolve DELIVERY_ID --abandon
+my-nanobot-rpi news delivery regenerate DELIVERY_ID
+```
+
+list/show는 기존 DB를 read-only로 열고 누락된 DB를 만들거나 seed·migration·복구·외부 호출을
+수행하지 않는다. 실패 원장, part별 API message_id/ACK 시각, human_received/human_abandoned
+감사 기록을 확인한다. API ACK와 Human 실수신은 구분한다.
+
+retry는 설정된 동일 승인 대상만 사용하며 live owner, payload 없음, 이미 종료한 상태를 다시
+발송하지 않는다. ACK된 part는 건너뛰고 미완료 part마다 한 번만 시도한다. unknown은 실제
+도착했을 가능성이 있으므로 운영자가 중복 위험을 수용할 때만 --confirm-uncertain을 사용한다.
+관찰 창 전체 수동 retry 1회를 소모한다. 모두 ACK이고 마지막 DB 저장만 실패했다면 이 명령은
+POST 없이 마지막 transaction만 다시 완료한다. resolve는 --received/--abandon 중 하나이며
+API ACK/message_id를 조작하거나 과거 briefed를 재분류하지 않는다. regenerate는 payload가 없는
+failed generation만 같은 ID로 다시 생성하며 기존 예약을 재사용한다. 모델에는 이 권한을 주지 않는다.
+
+운영 적용 전 운영자가 대상·시간창·후보 SHA를 승인하고 현재 root/gitlink·설정·SQLite의
+일관된 backup(sqlite backup API 또는 서비스 정지 후 복사)을 비공개로 보관한다. rollback은
+먼저 뉴스 예약을 중지하고 이전 root와 dependency pin으로 코드만 복귀하며 **현재 DB를 보존**한다.
+additive schema의 새 표는 남겨 두어도 기존 SELECT와 생활 기록을 유지한다. 이전 dependency pin은
+`1bb712d3488915ca4ed9ccc1a93067ff722f5ab9`, 현재 관리 fork pin은
+`13c7435eb85577d3004ee4bbee5fcb4fbdcc203d`이다. pin 복귀 후 재설치하며 뉴스 예약은 중지 상태를 유지한다.
+DB backup 덮어쓰기는 이후 생활 기록을 잃을 수 있으므로 별도 승인 없이 수행하지 않는다.
+복원 검증은 임시 사본에서 하고 실제 발송·smoke·최종 병합은 별도 Human Gate를 따른다.

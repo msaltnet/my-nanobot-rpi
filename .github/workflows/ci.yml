@@ -33,4 +33,11 @@ jobs:
       run: uv pip install --system -e ".[dev]"
 
     - name: Run tests
-      run: uv run pytest tests/msalt/
+      run: python -m pytest tests/msalt/
+
+    - name: Verify installed dependency ownership boundary
+      working-directory: nanobot
+      run: python -m pytest tests/agent/test_delivery_ownership.py
+
+    - name: Check installed dependencies
+      run: python -m pip check

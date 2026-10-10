@@ -3,7 +3,7 @@ import os
 
 from typer.testing import CliRunner
 
-from msalt.cli import _check_env, _load_env_file, _seed_if_missing, app
+from msalt.cli import SEED_SKILLS_DIR, _check_env, _load_env_file, _seed_if_missing, app
 
 runner = CliRunner()
 
@@ -107,13 +107,16 @@ def test_seed_updates_existing_msalt_skills(tmp_path, monkeypatch):
         "```bash\npython -m msalt.news.cli collect\n```\n",
         encoding="utf-8",
     )
+    user_note = skill.parent / "operator-notes.md"
+    user_note.write_text("keep this local note\n", encoding="utf-8")
 
     created = _seed_if_missing()
 
     assert str(skill.parent) in created
-    text = skill.read_text(encoding="utf-8")
-    assert "my-nanobot-rpi news collect" in text
-    assert "python -m msalt.news.cli collect" not in text
+    assert skill.read_bytes() == (SEED_SKILLS_DIR / "news-briefing" / "SKILL.md").read_bytes()
+    assert user_note.read_text(encoding="utf-8") == "keep this local note\n"
+    assert _seed_if_missing() == []
+    assert user_note.read_text(encoding="utf-8") == "keep this local note\n"
 
 
 def test_seed_updates_existing_msalt_cron_jobs(tmp_path, monkeypatch):

@@ -178,7 +178,7 @@ def test_kst_schedule_query_boundary_and_exclusions(
     assert all(a["url"] not in text for a in samples[2:])
 
 
-def test_category_cap_marks_only_rendered_articles(storage):
+def test_category_cap_renders_ten_without_marking(storage):
     items = []
     for category in briefing.CATEGORY_ORDER:
         for index in range(12):
@@ -199,14 +199,14 @@ def test_category_cap_marks_only_rendered_articles(storage):
     expected = {a["url"] for a in items if int(a["url"].rsplit("-", 1)[1]) >= 2}
     assert rendered == expected
     assert len(rendered) == 30
-    assert storage.get_briefed_article_urls([a["url"] for a in items]) == expected
+    assert storage.get_briefed_article_urls([a["url"] for a in items]) == set()
     assert {a["url"] for a in gen.get_articles_for_briefing(since_date="2026-10-08 05:00:00")} == {
         a["url"] for a in items
-    } - expected
+    }
 
 
 @pytest.mark.parametrize("failure", ["api_error", "timeout", "empty_response"])
-def test_mock_llm_failure_falls_back_and_marks_plain_output(storage, offline_boundaries, failure):
+def test_mock_llm_failure_falls_back_without_marking_plain_output(storage, offline_boundaries, failure):
     _, llm = offline_boundaries
     if failure == "timeout":
         import httpx
@@ -226,7 +226,7 @@ def test_mock_llm_failure_falls_back_and_marks_plain_output(storage, offline_bou
     assert f"   원문: {item['url']}" in text
     assert item["title"] in text
     llm.chat.completions.create.assert_called_once()
-    assert storage.get_briefed_article_urls([item["url"]]) == {item["url"]}
+    assert Storage(storage.db_path).get_briefed_article_urls([item["url"]]) == set()
 
 
 def test_plain_mode_makes_no_llm_call(storage, offline_boundaries):
@@ -238,8 +238,8 @@ def test_plain_mode_makes_no_llm_call(storage, offline_boundaries):
     llm.chat.completions.create.assert_not_called()
 
 
-def test_generated_state_survives_fake_failed_send_and_suppresses_restart_retry(storage):
-    """Characterizes loss after generation; fake send is not real Telegram validation."""
+def test_preview_failed_send_preserves_restart_selection(storage):
+    """Preview never loses an article because a later external send fails."""
     item = article("undelivered")
     storage.insert_article(**item)
     text = briefing.BriefingGenerator(storage, use_llm=False).format_briefing("evening")
@@ -253,24 +253,20 @@ def test_generated_state_survives_fake_failed_send_and_suppresses_restart_retry(
 
     with pytest.raises(RuntimeError, match="synthetic send failure"):
         fake_failed_send(text)
-    assert observed == [{item["url"]}]
+    assert observed == [set()]
     restarted = briefing.BriefingGenerator(Storage(storage.db_path), use_llm=False)
-    assert restarted.get_articles_for_briefing(since_date="2026-10-08 05:00:00") == []
-    assert "수집된 뉴스가 없습니다" in restarted.format_briefing("evening")
+    assert [a["url"] for a in restarted.get_articles_for_briefing(since_date="2026-10-08 05:00:00")] == [item["url"]]
+    assert item["url"] in restarted.format_briefing("evening")
 
 
-def test_mark_failure_returns_no_text_and_restart_retry_is_available(storage):
+def test_preview_ignores_briefed_insert_trigger_and_preserves_article(storage):
     item = article("mark-failure")
     storage.insert_article(**item)
     with sqlite3.connect(storage.db_path) as conn:
         conn.execute("""CREATE TRIGGER reject_mark BEFORE INSERT ON news_briefed_articles
                         BEGIN SELECT RAISE(ABORT, 'synthetic mark failure'); END""")
-    returned = []
-    with pytest.raises(sqlite3.IntegrityError, match="synthetic mark failure"):
-        returned.append(
-            briefing.BriefingGenerator(storage, use_llm=False).format_briefing("evening")
-        )
-    assert returned == []
+    text = briefing.BriefingGenerator(storage, use_llm=False).format_briefing('evening')
+    assert item['url'] in text
     reopened = Storage(storage.db_path)
     assert reopened.get_briefed_article_urls([item["url"]]) == set()
     gen = briefing.BriefingGenerator(reopened, use_llm=False)
@@ -280,20 +276,87 @@ def test_mark_failure_returns_no_text_and_restart_retry_is_available(storage):
     with sqlite3.connect(storage.db_path) as conn:
         conn.execute("DROP TRIGGER reject_mark")
     assert item["url"] in gen.format_briefing("evening")
-    assert reopened.get_briefed_article_urls([item["url"]]) == {item["url"]}
+    assert reopened.get_briefed_article_urls([item["url"]]) == set()
 
 
-def test_collect_then_cli_briefing_collects_all_four_paths_twice(storage, offline_boundaries):
-    """Characterizes the skill's two-command sequence, not real remote call cost."""
+def _run_preview(time_of_day):
+    """Manual CLI preview remains one collection; tool/skill integration is separate."""
+    return [cli.run_briefing(time_of_day)]
+
+
+@pytest.mark.parametrize("time_of_day", ["morning", "afternoon", "evening"])
+def test_preview_briefing_collects_all_four_paths_once(storage, offline_boundaries, time_of_day):
+    """Manual preview performs one collection for its selected briefing."""
     fakes, _ = offline_boundaries
     for index, fake in enumerate(fakes):
         fake.collect_all.return_value = [article(f"cli-{index}")]
-    assert "4건" in cli.run_collect()
-    text = cli.run_briefing("evening")
+    results = _run_preview(time_of_day)
+    text = results[-1]
     assert len(stored_urls(storage)) == 4
     assert all(article(f"cli-{i}")["url"] in text for i in range(4))
     for fake in fakes:
-        assert fake.collect_all.call_count == 2
+        fake.collect_all.assert_called_once_with()
+
+
+@pytest.mark.parametrize("scenario", ["one_failure", "all_empty", "empty_db", "duplicate"])
+def test_preview_keeps_one_collection_for_partial_empty_and_duplicate_results(
+    storage, offline_boundaries, scenario
+):
+    fakes, _ = offline_boundaries
+    existing = article("existing")
+    if scenario != "empty_db":
+        storage.insert_article(**existing)
+    if scenario == "one_failure":
+        fakes[0].collect_all.side_effect = RuntimeError("synthetic source failure")
+        fakes[1].collect_all.return_value = [article("new")]
+    elif scenario == "duplicate":
+        fakes[0].collect_all.return_value = [dict(existing, title="replacement")]
+
+    text = _run_preview("evening")[-1]
+
+    if scenario == "empty_db":
+        assert "수집된 뉴스가 없습니다" in text
+    else:
+        assert existing["url"] in text
+    if scenario == "one_failure":
+        assert article("new")["url"] in text
+    elif scenario != "empty_db":
+        assert stored_urls(storage) == {existing["url"]}
+    if scenario == "duplicate":
+        assert storage.get_articles_since("2020-01-01")[0]["title"] == existing["title"]
+    for fake in fakes:
+        fake.collect_all.assert_called_once_with()
+
+
+def test_manual_collect_remains_a_single_collection(storage, offline_boundaries):
+    fakes, llm = offline_boundaries
+    item = article("manual")
+    fakes[0].collect_all.return_value = [item]
+
+    assert cli.run_collect() == "뉴스 수집 완료: 1건"
+
+    assert stored_urls(storage) == {item["url"]}
+    llm.chat.completions.create.assert_not_called()
+    for fake in fakes:
+        fake.collect_all.assert_called_once_with()
+
+
+def test_preview_storage_error_does_not_generate_or_repeat(storage, offline_boundaries):
+    fakes, llm = offline_boundaries
+    first, failed = article("first"), article("failed")
+    fakes[0].collect_all.return_value = [first, failed]
+    with sqlite3.connect(storage.db_path) as conn:
+        conn.execute("""CREATE TRIGGER reject_article BEFORE INSERT ON news_articles
+                        WHEN NEW.url = 'https://example.invalid/failed'
+                        BEGIN SELECT RAISE(ABORT, 'synthetic insert failure'); END""")
+
+    with pytest.raises(sqlite3.IntegrityError, match="synthetic insert failure"):
+        _run_preview("evening")
+
+    assert stored_urls(Storage(storage.db_path)) == {first["url"]}
+    llm.chat.completions.create.assert_not_called()
+    for fake in fakes:
+        fake.collect_all.assert_called_once_with()
 
 
 def test_keyword_search_includes_old_articles_and_over_ten_without_marking(storage):

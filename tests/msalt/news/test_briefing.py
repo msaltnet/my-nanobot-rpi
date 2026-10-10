@@ -90,14 +90,12 @@ def test_get_articles_for_briefing_excludes_already_briefed_urls(mock_storage):
     assert [a["url"] for a in articles] == ["https://reuters.com/1"]
 
 
-def test_format_briefing_marks_rendered_articles_as_briefed(mock_storage):
+@pytest.mark.parametrize('legacy_mark', [False, True])
+def test_format_briefing_preserves_rendered_urls_without_marking(mock_storage, legacy_mark):
     gen = BriefingGenerator(storage=mock_storage, use_llm=False)
-
-    gen.format_briefing("evening")
-
-    args, _ = mock_storage.mark_articles_briefed.call_args
-    assert args[0] == ["https://hk.com/1", "https://reuters.com/1"]
-    assert args[1].endswith(":evening")
+    text = gen.format_briefing('evening', mark_as_briefed=legacy_mark)
+    assert 'https://hk.com/1' in text and 'https://reuters.com/1' in text
+    mock_storage.mark_articles_briefed.assert_not_called()
 
 
 def test_format_briefing_can_skip_marking_articles(mock_storage):
