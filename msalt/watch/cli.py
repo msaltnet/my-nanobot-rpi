@@ -39,6 +39,16 @@ def build_parser() -> argparse.ArgumentParser:
                 child.add_argument("--excluded-json")
             if command == "delete":
                 child.add_argument("--confirm", action="store_true")
+    child = sub.add_parser('evaluate', help='Evaluate saved articles; model calls may incur cost')
+    child.add_argument('--json', action='store_true', default=argparse.SUPPRESS)
+    child.add_argument('--max-articles', type=int, default=100)
+    child.add_argument('--max-calls', type=int, default=10)
+    child.add_argument('--retry-errors', action='store_true')
+    child = sub.add_parser('evaluations')
+    child.add_argument('--json', action='store_true', default=argparse.SUPPRESS)
+    child.add_argument('--watch-id', type=int)
+    child.add_argument('--status')
+    child.add_argument('--limit', type=int, default=100)
     return parser
 
 
@@ -59,6 +69,16 @@ def _emit(data, *, structured: bool) -> None:
         if not rows:
             print("No Watch conditions")
         for item in rows:
+            if 'run_id' in item and 'calls_reserved' in item:
+                print(f"Processed {item['articles_processed']} candidates; reserved {item['calls_reserved']} model calls")
+                continue
+            if 'article' in item:
+                print(f"{item['id']} watch={item['watch_id']} revision={item['revision']} {item['status']} stale={item['stale']}")
+                print(item['article']['title'])
+                print(f"published_at={item['article']['published_at']}")
+                print(item['reason'] or item['error_code'] or '')
+                print(item['evidence'] or '')
+                continue
             state = "deleted" if item["deleted_at"] else "active" if item["active"] else "paused"
             print(f"{item['id']} revision={item['revision']} {state}: {item['name']}")
             print(item["description"])
@@ -79,7 +99,18 @@ def run_command(argv: list[str], *, db_path: str | None = None) -> int:
         return 1
     store = WatchStore(storage)
     try:
-        if args.command == "add":
+        if args.command in {'evaluate', 'evaluations'}:
+            from msalt.watch.evaluation import Evaluator
+            from msalt.watch.evaluation_store import EvaluationStore
+            evaluations = EvaluationStore(storage)
+            if args.command == 'evaluate':
+                print('Watch evaluation model calls may incur API cost.', file=sys.stderr)
+                result = Evaluator(evaluations).run(max_articles=args.max_articles,
+                                                  max_calls=args.max_calls,
+                                                  retry_errors=args.retry_errors)
+            else:
+                result = evaluations.list(watch_id=args.watch_id, status=args.status, limit=args.limit)
+        elif args.command == "add":
             result = store.add(args.name, description=args.description,
                                keywords=_keywords(args.keywords_json),
                                excluded_keywords=_keywords(args.excluded_json))
@@ -102,7 +133,8 @@ def run_command(argv: list[str], *, db_path: str | None = None) -> int:
             if args.command == "delete" and not args.confirm:
                 raise ValueError("Delete requires user confirmation and --confirm")
             result = getattr(store, args.command)(args.id, expected_revision=args.expected_revision)
-        data = [asdict(item) for item in result] if isinstance(result, list) else asdict(result)
+        data = ([item if isinstance(item, dict) else asdict(item) for item in result]
+                if isinstance(result, list) else result if isinstance(result, dict) else asdict(result))
         _emit(data, structured=args.json)
         return 0
     except ValueError as exc:
