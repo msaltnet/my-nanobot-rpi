@@ -208,7 +208,7 @@ def test_delete_cascades_ledger_and_new_item_has_independent_id(tmp_path):
     assert len(posts) == 2
 
 
-def test_cli_status_and_confirmed_release_keep_same_slot_tombstone(tmp_path, capsys):
+def test_cli_status_and_confirmed_release_keep_same_slot_tombstone(tmp_path, capsys, monkeypatch):
     storage, items, records = fixture(tmp_path / 'release.db')
     items.add('private-item-marker', 'boolean', None, '08:00')
     def unknown(text):
@@ -223,6 +223,7 @@ def test_cli_status_and_confirmed_release_keep_same_slot_tombstone(tmp_path, cap
     assert 'private-item-marker' not in output and 'private-error-marker' not in output
     assert cli.run_command(['delivery-release', str(delivery_id)], db_path=db) == 2
     assert ledger(storage)[0]['resolved_at'] is None
+    freeze_release_clock(monkeypatch, tick(8, 5))
     assert cli.run_command(['delivery-release', str(delivery_id), '--confirm-received'], db_path=db) == 0
     assert ledger(storage)[0]['state'] == 'unknown'
     assert ledger(storage)[0]['resolved_at'] is not None
@@ -308,7 +309,7 @@ def test_equivalent_utc_offsets_claim_same_slot(tmp_path):
     assert len(ledger(storage)) == 1
 
 
-def test_unknown_retry_keeps_original_pending_and_blocks_later_slots(tmp_path):
+def test_unknown_retry_keeps_original_pending_and_blocks_later_slots(tmp_path, monkeypatch):
     storage, items, records = fixture(tmp_path / 'retry-unknown.db')
     items.add('exercise', 'boolean', None, '08:00')
     sent = []
@@ -323,9 +324,10 @@ def test_unknown_retry_keeps_original_pending_and_blocks_later_slots(tmp_path):
     assert item['last_asked_at'] == '2026-10-08 23:00:00'
     assert Dispatcher(items, records, sent.append).run(tick(14)) == []
     assert len(sent) == 2
+    freeze_release_clock(monkeypatch, tick(14, 5))
     DeliveryStore(storage).release(ledger(storage)[1]['id'], confirmed_received=True)
-    assert Dispatcher(items, records, sent.append).run(tick(9, 5)) == []
-    assert len(Dispatcher(items, records, sent.append).run(tick(14))) == 1
+    assert Dispatcher(items, records, sent.append).run(tick(14, 20)) == []
+    assert len(Dispatcher(items, records, sent.append).run(tick(20))) == 1
 
 
 def test_unresolved_prior_date_does_not_block_next_date(tmp_path):
@@ -435,3 +437,89 @@ def test_migration_helper_does_not_commit_and_initialize_failure_rolls_back(tmp_
         original(conn)
         assert conn.in_transaction
         conn.rollback()
+
+
+def freeze_release_clock(monkeypatch, when):
+    from msalt.tracking import delivery_store
+    class ReleaseClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return when.astimezone(tz)
+    monkeypatch.setattr(delivery_store, 'datetime', ReleaseClock)
+
+
+def test_rejection_after_retry_slot_waits_for_next_future_slot(tmp_path):
+    storage, items, records = fixture(tmp_path / 'delayed-rejection.db')
+    items.add('exercise', 'boolean', None, '08:45')
+    def reject(text):
+        raise DeliveryRejected('rejected')
+    with pytest.raises(DeliveryRejected):
+        Dispatcher(items, records, reject).run(tick(9, 5))
+    item = items.get('exercise')
+    assert item['pending_since'] == '2026-10-09 00:05:00'
+    assert item['pending_recorded_for'] == '2026-10-09'
+    assert item['last_asked_at'] is None
+    posts = []
+    assert Dispatcher(items, records, posts.append).run(tick(9, 20)) == []
+    assert posts == []
+    assert len(Dispatcher(items, records, posts.append).run(tick(14))) == 1
+    assert Dispatcher(items, records, posts.append).run(tick(14, 5)) == []
+    assert len(posts) == 1
+    assert [r['slot_utc'] for r in ledger(storage)] == [
+        '2026-10-08T23:45:00+00:00', '2026-10-09T05:00:00+00:00']
+
+
+def test_release_after_retry_slot_waits_for_next_future_slot(tmp_path, monkeypatch):
+    storage, items, records = fixture(tmp_path / 'delayed-release.db')
+    items.add('exercise', 'boolean', None, '08:00')
+    def unknown(text):
+        raise DeliveryUnknown('unknown')
+    with pytest.raises(DeliveryUnknown):
+        Dispatcher(items, records, unknown).run(tick())
+    freeze_release_clock(monkeypatch, tick(9, 5))
+    DeliveryStore(storage).release(ledger(storage)[0]['id'], confirmed_received=True)
+    assert ledger(storage)[0]['resolved_at'] == '2026-10-09T00:05:00+00:00'
+    assert items.get('exercise')['last_asked_at'] is None
+    posts = []
+    assert Dispatcher(items, records, posts.append).run(tick(9, 20)) == []
+    assert posts == []
+    assert len(Dispatcher(items, records, posts.append).run(tick(14))) == 1
+    assert len(posts) == 1
+    assert ledger(storage)[0]['state'] == 'unknown'
+    assert ledger(storage)[1]['slot_utc'] == '2026-10-09T05:00:00+00:00'
+
+
+@pytest.mark.parametrize('outcome', ['rejected', 'released'])
+def test_claim_rechecks_persisted_boundary_for_stale_candidate_and_equal_slot(
+    tmp_path, monkeypatch, outcome
+):
+    storage, items, _ = fixture(tmp_path / 'stale-candidate.db')
+    item_id = items.add('exercise', 'boolean', None, '08:00')
+    store = DeliveryStore(storage)
+    claim = store.claim([
+        DeliveryCandidate(item_id, '2026-10-09', 'scheduled', '2026-10-09T08:00:00+09:00')
+    ], '2026-10-08 23:00:00')[0]
+    candidate = DeliveryCandidate(item_id, '2026-10-09', 'retry', '2026-10-09T09:00:00+09:00')
+    # The retry candidate existed before another SQLite connection finalized its boundary.
+    other = DeliveryStore(Storage(storage.db_path))
+    if outcome == 'rejected':
+        other.finish([claim['id']], 'rejected', '2026-10-09 00:00:00')
+    else:
+        other.finish([claim['id']], 'unknown', '2026-10-08 23:00:00')
+        freeze_release_clock(monkeypatch, tick(9))
+        other.release(claim['id'], confirmed_received=True)
+    assert store.claim([candidate], '2026-10-09 00:20:00') == []
+    assert len(ledger(storage)) == 1
+    assert len(store.claim([
+        DeliveryCandidate(item_id, '2026-10-09', 'retry', '2026-10-09T14:00:00+09:00')
+    ], '2026-10-09 05:00:00')) == 1
+
+
+def test_legacy_pending_without_delivery_boundary_preserves_existing_retry(tmp_path):
+    storage, items, records = fixture(tmp_path / 'legacy-retry.db')
+    item_id = items.add('exercise', 'boolean', None, '08:00')
+    storage.set_pending_since(item_id, '2026-10-09 00:05:00', '2026-10-09')
+    posts = []
+    assert len(Dispatcher(items, records, posts.append).run(tick(9, 20))) == 1
+    assert len(posts) == 1
+    assert ledger(storage)[0]['slot_utc'] == '2026-10-09T00:00:00+00:00'

@@ -57,6 +57,26 @@ class DeliveryStore:
                     AND state IN ('claimed', 'unknown')
                 """, (candidate.item_id, candidate.recorded_for)).fetchone():
                     continue
+                if candidate.kind == 'retry':
+                    boundaries = conn.execute("""
+                        SELECT state, completed_at, resolved_at FROM tracking_deliveries
+                        WHERE item_id = ? AND recorded_for = ?
+                        AND (state = 'rejected' OR resolved_at IS NOT NULL)
+                    """, (candidate.item_id, candidate.recorded_for)).fetchall()
+                    slot = datetime.fromisoformat(candidate.slot_utc)
+                    cutoff_times = []
+                    for row in boundaries:
+                        for value in (row['completed_at'] if row['state'] == 'rejected'
+                                      else None, row['resolved_at']):
+                            if value is not None:
+                                cutoff = datetime.fromisoformat(value)
+                                # completed_at uses existing naive UTC storage format;
+                                # resolved_at is an aware UTC ISO timestamp.
+                                if cutoff.tzinfo is None:
+                                    cutoff = cutoff.replace(tzinfo=timezone.utc)
+                                cutoff_times.append(cutoff)
+                    if cutoff_times and slot <= max(cutoff_times):
+                        continue
                 cursor = conn.execute("""
                     INSERT INTO tracking_deliveries
                     (item_id, recorded_for, kind, slot_utc, state, claimed_at)
