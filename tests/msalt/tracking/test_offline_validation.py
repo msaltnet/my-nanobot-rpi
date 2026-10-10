@@ -296,7 +296,7 @@ def test_advice_failure_after_commit_leaves_saved_record_and_success_line(
 
 
 @pytest.mark.parametrize("days,start", [(7, "2026-10-03"), (30, "2026-09-10")])
-def test_period_start_end_and_future_row_pollute_summary(tracking, days, start):
+def test_period_start_and_ref_date_boundaries_exclude_future_rows(tracking, days, start):
     _, store, items, records = tracking
     items.add("운동", "boolean", None, "22:00")
     item_id = items.get("운동")["id"]
@@ -309,14 +309,14 @@ def test_period_start_end_and_future_row_pollute_summary(tracking, days, start):
     ):
         records.upsert("운동", day, raw_input="synthetic", value_bool=value)
     rows = store.get_records_for_item(item_id, days, "2026-10-09")
-    assert [row["recorded_for"] for row in rows] == ["2026-10-10", "2026-10-09", start]
+    assert [row["recorded_for"] for row in rows] == ["2026-10-09", start]
+    assert store.record_exists(item_id, "2026-10-10")
     assert records.summarize("운동", days, "2026-10-09") == (
-        f"운동: 최근 {days}일 2/3회 수행 (66%)"
+        f"운동: 최근 {days}일 1/2회 수행 (50%)"
     )
     advice = records.advice_after_record("운동", "2026-10-09", days=days)
-    assert f"최근 {days}일 2번" in advice
-    # The day before the seven-day start is still inside the 30-day advice window.
-    assert f"최근 30일 {3 if days == 7 else 2}번" in advice
+    assert f"최근 {days}일 1번" in advice
+    assert f"최근 30일 {2 if days == 7 else 1}번" in advice
 
 
 def test_boolean_false_and_missing_are_distinct_in_recorded_day_denominator(tracking):

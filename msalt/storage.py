@@ -330,8 +330,8 @@ class Storage:
         try:
             rows = conn.execute(
                 "SELECT * FROM records WHERE item_id = ? AND recorded_for >= ? "
-                "ORDER BY recorded_for DESC",
-                (item_id, since),
+                "AND recorded_for <= ? ORDER BY recorded_for DESC",
+                (item_id, since, ref_date),
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
