@@ -411,11 +411,24 @@ recipient별 KST 09:00 이상 21:00 미만, UTC 시간 슬롯당1개/KST 날짜�
 메시지3,500자(UTF-16 단위도 제한)를 적용한다. pending/sending/sent/unknown/rejected와
 cancelled 슬롯도 일일 quota를 소비한다. 이미 ACK된 URL은 revision 변경으로 재발송하지
 않으며 뉴스 브리핑 이력과는 분리된다. 모델을 다시 생성하지 않고 저장한 평가 입력의
-제목·URL과 Watch 이유를 결정적으로 표시한다. 전역 FIFO의 중복 URL을 포함한 첫100개 eligible evaluation행의
-URL key만 검토하고 선택 URL마다 최대20개의 현재 Watch 이유를 모아 snapshot 메모리를
-제한한다. 너무 긴 URL/표시 불가능한 기사는 쪼개거나 URL을 자르지 않고 보류하며,
-이런 항목이 첫100개를 채우면 뒤 대기열 전달이 지연될 수 있다. 저장한 같은 URL의
-Watch별 이유가 여러 개면 가장 오래된 article ID/evaluation ID의 snapshot을 사용한다.
+제목·URL과 Watch 이유를 결정적으로 표시한다. 전역 FIFO의 saved URL key를 read-only snapshot에서 한 번에100행씩 읽고, 표시 불가능한
+앞 항목을 지나 다음 전달 가능한 기사를 찾는다. 고정된 첫100행 prefix로 뒤 기사 전달을
+영구 막지 않는다. URL별 현재 Watch의 가장 오래된 이유를 최대20개씩 읽고 선택 그룹은
+최대3개만 유지하며, all-backlog 원문 snapshot을 fetchall하지 않는다. 표시 불가능한 중복
+URL은 재검사할 수 있으나 보류 URL 전체를 메모리 set으로 모으지 않는다. 더 긴 URL은
+쪼개거나 자르지 않는다. 같은 URL/Watch의 여러 이유는 가장 오래된 article/evaluation ID의
+snapshot을 사용한다. 어떤 오래된 항목이 새 메시지에는 들어가지만 현재 남은 공간에는
+들어가지 않으면 그 항목을 다음 슬롯의 첫 후보로 남기고 더 젊은 기사로 우회하지 않는다.
+
+모든 후보가 표시 불가능하면 전체 backlog를 읽을 수 있어 CPU와 read-snapshot 시간이
+늘어난다. BEGIN IMMEDIATE 쓰기 잠금 안에서 이 전체 스캔/formatting을 하지는 않지만,
+SQLite DELETE journal의 SHARED reader는 writer COMMIT을 지연시킬 수 있다. 읽기 스냅샷을
+닫은 뒤 쓰기 claim은 선택 evaluation 최대60행/URL 최대3개와 slot/day/shared-state만 재검사한다.
+어떤 선택 후보의 자격·입력·이유나 URL claim 상태가 달라지면 전체 준비 결과를 버리고
+새 quota/claim/POST 없이 다음 invocation에서 새로 읽는다. 스냅샷 읽기 뒤 새로 완료된
+더 오래된 article ID의 평가는 다음 invocation에서 본다. FIFO는 이 coherent read snapshot의
+전달 가능한 후보 기준이다. Production time은 긴 스캔 후 final claim과 sending 직전에
+실제 시계로 다시 읽어 hour/day/quiet 경계를 검사한다. 명시적 diagnostic --now는 고정이다.
 
 발송 전에 slot/day/URL claim·payload/candidate snapshot을 commit하고, 마지막 검사를
 통과한 뒤 sending과 attempt를 commit한다. POST 중 DB transaction을 유지하지 않는다.

@@ -194,82 +194,164 @@ class NotificationStore(EvaluationStore):
                 (now,),
             )
 
+    def _guard(self, conn, key, now):
+        """Bounded shared policy checks, including old pending cancellation."""
+        slot = now.replace(minute=0, second=0, microsecond=0).isoformat()
+        day = now.astimezone(KST).date().isoformat()
+        pending = conn.execute(
+            "SELECT * FROM watch_notifications WHERE target_hash=? AND state='pending' ORDER BY created_at LIMIT 1",
+            (key,),
+        ).fetchone()
+        if pending and pending["slot_utc"] == slot:
+            return dict(pending)
+        if pending:
+            self._cancel(conn, pending, now, "slot_expired")
+        if not self._enabled(conn):
+            return {"state": "disabled"}
+        if not 9 <= now.astimezone(KST).hour < 21:
+            return {"state": "quiet"}
+        if (
+            conn.execute(
+                "SELECT 1 FROM watch_notifications WHERE target_hash=? AND slot_utc=?", (key, slot)
+            ).fetchone()
+            or conn.execute(
+                "SELECT COUNT(*) FROM watch_notifications WHERE target_hash=? AND kst_day=?",
+                (key, day),
+            ).fetchone()[0]
+            >= 6
+        ):
+            return {"state": "limited"}
+        return None
+
+    def _scan(self, key):
+        """Coherent read snapshot; bounded live rows, no RESERVED writer lock.
+
+        Scan through unformattable prefixes instead of truncating progress. Under
+        DELETE journaling this SHARED reader can delay writer COMMIT; work/read
+        duration can grow with backlog, but full snapshot materialization cannot.
+        """
+        conn = self.storage._connect()
+        try:
+            conn.execute("BEGIN")
+            sql = f"""SELECT json_extract(e.input_snapshot,'$.article.url') AS url,
+                u.state AS url_state,u.attempts AS url_attempts,u.delivery_id AS url_owner
+                FROM watch_evaluations e JOIN watch_conditions w ON w.id=e.watch_id
+                LEFT JOIN watch_notification_urls u ON u.target_hash=? AND u.url=json_extract(e.input_snapshot,'$.article.url')
+                WHERE {ELIGIBLE} AND (u.url IS NULL OR (u.state IN ('available','rejected') AND u.attempts<2))
+                ORDER BY e.article_id,e.watch_id,e.id"""
+            cursor = conn.execute(sql, (key,))
+            sections, selected, snapshots, claims = [], [], [], {}
+            used = text_units("Watch 알림\n\n")
+            while len(sections) < 3:
+                page = cursor.fetchmany(100)
+                if not page:
+                    break
+                for url_row in page:
+                    url = url_row["url"]
+                    # Only accepted URLs are retained for deduplication (max3).
+                    # Unformattable duplicates may be inspected again, never cached
+                    # into an unbounded Python set or skipped on later invocations.
+                    if (
+                        url in claims
+                        or not isinstance(url, str)
+                        or not url
+                        or any(c.isspace() for c in url)
+                        or text_units(url) > 3500
+                    ):
+                        continue
+                    group = conn.execute(
+                        f"""SELECT * FROM (
+                        SELECT e.*, ROW_NUMBER() OVER (PARTITION BY e.watch_id ORDER BY e.article_id,e.id) AS reason_rank
+                        FROM watch_evaluations e JOIN watch_conditions w ON w.id=e.watch_id
+                        WHERE {ELIGIBLE} AND json_extract(e.input_snapshot,'$.article.url')=?
+                        ) WHERE reason_rank=1 ORDER BY article_id,watch_id,id""",
+                        (url,),
+                    ).fetchall()
+                    remaining = 3500 - used - (2 if sections else 0)
+                    text = article_text(group, min(1100, remaining)) or article_text(
+                        group, remaining
+                    )
+                    if text is None:
+                        # A valid older item that needs a fresh message must lead
+                        # the next slot; do not pack younger items around it.
+                        if (
+                            sections
+                            and article_text(group, 3500 - text_units("Watch 알림\n\n")) is not None
+                        ):
+                            cursor.close()
+                            return sections, selected, snapshots, claims
+                        continue
+                    used += text_units(text) + (2 if sections else 0)
+                    sections.append(text)
+                    selected.extend((r, url) for r in group)
+                    claims[url] = (
+                        url_row["url_state"],
+                        url_row["url_attempts"],
+                        url_row["url_owner"],
+                    )
+                    snapshots.extend(
+                        {
+                            "evaluation_id": r["id"],
+                            "input_hash": r["input_hash"],
+                            "input": json.loads(r["input_snapshot"]),
+                            "reason": r["reason"],
+                            "evidence": r["evidence"],
+                        }
+                        for r in group
+                    )
+                    if len(sections) == 3:
+                        break
+            cursor.close()
+            return sections, selected, snapshots, claims
+        finally:
+            conn.rollback()
+            conn.close()
+
     def prepare(self, target, *, now=None):
-        now = clock(now)
+        requested_now = now
+        now = clock(requested_now)
         key = target_key(target)
+        with self._transaction() as conn:
+            existing = self._guard(conn, key, now)
+            if existing is not None:
+                return existing
+        sections, selected, snapshots, claims = self._scan(key)
+        # Refresh production time after an arbitrarily long readonly scan. Explicit
+        # diagnostic time stays fixed; sending independently refreshes real time.
+        now = clock(requested_now)
         slot = now.replace(minute=0, second=0, microsecond=0).isoformat()
         day = now.astimezone(KST).date().isoformat()
         with self._transaction() as conn:
-            pending = conn.execute(
-                "SELECT * FROM watch_notifications WHERE target_hash=? AND state='pending' ORDER BY created_at LIMIT 1",
-                (key,),
-            ).fetchone()
-            if pending and pending["slot_utc"] == slot:
-                return dict(pending)
-            if pending:
-                self._cancel(conn, pending, now, "slot_expired")
-            if not self._enabled(conn):
-                return {"state": "disabled"}
-            if not 9 <= now.astimezone(KST).hour < 21:
-                return {"state": "quiet"}
-            if (
-                conn.execute(
-                    "SELECT 1 FROM watch_notifications WHERE target_hash=? AND slot_utc=?",
-                    (key, slot),
-                ).fetchone()
-                or conn.execute(
-                    "SELECT COUNT(*) FROM watch_notifications WHERE target_hash=? AND kst_day=?",
-                    (key, day),
-                ).fetchone()[0]
-                >= 6
-            ):
-                return {"state": "limited"}
-            # Order globally BEFORE any bound. Saved URL, never mutable article columns.
-            sql = f"""SELECT json_extract(e.input_snapshot,'$.article.url') AS url FROM watch_evaluations e
-                JOIN watch_conditions w ON w.id=e.watch_id
-                LEFT JOIN watch_notification_urls u ON u.target_hash=? AND u.url=json_extract(e.input_snapshot,'$.article.url')
-                WHERE {ELIGIBLE} AND (u.url IS NULL OR (u.state IN ('available','rejected') AND u.attempts<2))
-                ORDER BY e.article_id,e.watch_id,e.id LIMIT 100"""
-            urls = conn.execute(sql, (key,)).fetchall()
-            sections, selected, snapshots = [], [], []
-            used = text_units("Watch 알림\n\n")
-            seen = set()
-            for url_row in urls:
-                url = url_row["url"]
-                if url in seen:
-                    continue
-                seen.add(url)
-                if len(sections) == 3:
-                    break
-                # At most 20 active Watch reasons; repeated saved URLs from the same
-                # Watch use its oldest source snapshot, with an explicit stable tie.
-                group = conn.execute(
-                    f"""SELECT * FROM (
-                    SELECT e.*, ROW_NUMBER() OVER (PARTITION BY e.watch_id ORDER BY e.article_id,e.id) AS reason_rank
-                    FROM watch_evaluations e JOIN watch_conditions w ON w.id=e.watch_id
-                    WHERE {ELIGIBLE} AND json_extract(e.input_snapshot,'$.article.url')=?
-                    ) WHERE reason_rank=1 ORDER BY article_id,watch_id,id""",
-                    (url,),
-                ).fetchall()
-                remaining = 3500 - used - (2 if sections else 0)
-                text = article_text(group, min(1100, remaining)) or article_text(group, remaining)
-                if text is None:
-                    continue
-                used += text_units(text) + (2 if sections else 0)
-                sections.append(text)
-                selected.extend((r, url) for r in group)
-                snapshots.extend(
-                    {
-                        "evaluation_id": r["id"],
-                        "input_hash": r["input_hash"],
-                        "input": json.loads(r["input_snapshot"]),
-                        "reason": r["reason"],
-                        "evidence": r["evidence"],
-                    }
-                    for r in group
-                )
+            existing = self._guard(conn, key, now)
+            if existing is not None:
+                return existing
             if not selected:
                 return {"state": "empty"}
+            identifiers = [r["id"] for r, _ in selected]
+            placeholders = ",".join("?" for _ in identifiers)
+            current = {
+                r["id"]: r
+                for r in conn.execute(
+                    f"SELECT e.* FROM watch_evaluations e JOIN watch_conditions w ON w.id=e.watch_id WHERE {ELIGIBLE} AND e.id IN ({placeholders})",
+                    identifiers,
+                ).fetchall()
+            }
+            # Do not partially rebuild a prepared read snapshot under the write
+            # fence. Any changed selected source/control or URL claim aborts all.
+            fields = ("input_hash", "input_snapshot", "reason", "evidence")
+            if len(current) != len(selected) or any(
+                any(current[row["id"]][field] != row[field] for field in fields)
+                for row, _ in selected
+            ):
+                return {"state": "empty", "error_code": "candidates_changed"}
+            for url, observed in claims.items():
+                claim = conn.execute(
+                    "SELECT state,attempts,delivery_id FROM watch_notification_urls WHERE target_hash=? AND url=?",
+                    (key, url),
+                ).fetchone()
+                actual = tuple(claim) if claim else (None, None, None)
+                if actual != observed:
+                    return {"state": "empty", "error_code": "url_claim_changed"}
             payload = json.dumps(
                 {"chat_id": target, "text": "Watch 알림\n\n" + "\n\n".join(sections)},
                 ensure_ascii=False,

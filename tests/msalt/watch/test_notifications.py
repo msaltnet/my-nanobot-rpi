@@ -728,3 +728,162 @@ def test_upgrade_pre_notification_database_preserves_existing_watch_and_other_ro
         assert before == {t: [tuple(r) for r in conn.execute("SELECT * FROM " + t)] for t in tables}
         assert conn.execute("SELECT enabled FROM watch_notification_settings").fetchone()[0] == 0
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_unformattable_prefix_does_not_starve_deliverable_fifo_articles(setup):
+    storage, _, _ = setup
+    candidates(storage)
+    with storage._connect() as conn:
+        original = dict(conn.execute("SELECT * FROM watch_evaluations").fetchone())
+        for identifier in range(1, 104):
+            url = (
+                "https://oversized/" + "x" * 3600 + str(identifier)
+                if identifier <= 100
+                else f"https://deliverable/{identifier}"
+            )
+            snapshot = json.loads(original["input_snapshot"])
+            snapshot["article"].update(id=identifier, title=f"GPU {identifier}", url=url)
+            raw = json.dumps(snapshot)
+            if identifier == 1:
+                conn.execute(
+                    "UPDATE watch_evaluations SET input_snapshot=? WHERE id=?",
+                    (raw, original["id"]),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO news_articles(id,source,title,url) VALUES(?,?,?,?)",
+                    (identifier, "fixture", f"GPU {identifier}", url),
+                )
+                conn.execute(
+                    "INSERT INTO watch_evaluations(watch_id,revision,article_id,status,relevant,importance,reason,evidence,input_snapshot,input_hash,created_at,updated_at) VALUES(?,?,?,'relevant',1,'high','Changed','GPU',?,'fixture',1,1)",
+                    (original["watch_id"], original["revision"], identifier, raw),
+                )
+    store, post = api(storage), Post()
+    store.set_enabled(True, confirm=True)
+    result = send(store, post)
+    assert result["state"] == "sent"
+    text = post.payloads[0]["text"]
+    assert (
+        text.index("https://deliverable/101")
+        < text.index("https://deliverable/102")
+        < text.index("https://deliverable/103")
+    )
+    assert len(post.payloads) == 1 and len(store.status()["deliveries"]) == 1
+
+
+def test_read_scan_formatting_does_not_own_reserved_writer_lock(setup, monkeypatch):
+    storage, _, _ = setup
+    candidates(storage, 3)
+    store = api(storage)
+    store.set_enabled(True, confirm=True)
+    from msalt.watch import notification_store
+
+    formatter = notification_store.article_text
+    checked = []
+
+    def check(rows, budget):
+        conn = storage._connect()
+        try:
+            conn.execute("PRAGMA busy_timeout=100")
+            conn.execute("BEGIN IMMEDIATE")
+            checked.append(True)
+            conn.rollback()
+        finally:
+            conn.close()
+        return formatter(rows, budget)
+
+    monkeypatch.setattr(notification_store, "article_text", check)
+    assert store.prepare(TARGET, now=NOW)["state"] == "pending"
+    assert checked
+
+
+def test_scan_to_claim_condition_change_consumes_no_quota_or_post(setup, monkeypatch):
+    storage, watches, item = setup
+    candidates(storage)
+    store, post = api(storage), Post()
+    store.set_enabled(True, confirm=True)
+    scan = store._scan
+
+    def change(key):
+        prepared = scan(key)
+        watches.pause(item.id, expected_revision=item.revision)
+        return prepared
+
+    monkeypatch.setattr(store, "_scan", change)
+    assert send(store, post)["state"] == "empty"
+    assert post.payloads == [] and store.status()["deliveries"] == []
+    with storage._connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM watch_notification_urls").fetchone()[0] == 0
+
+
+def test_scan_to_claim_url_change_cancels_whole_selection_without_new_quota(setup, monkeypatch):
+    storage, _, _ = setup
+    candidates(storage, 2)
+    store, post = api(storage), Post()
+    store.set_enabled(True, confirm=True)
+    scan = store._scan
+
+    def change(key):
+        prepared = scan(key)
+        competitor = api(storage)
+        row = competitor.prepare(TARGET, now=NOW - timedelta(days=1))
+        token = competitor.start_sending(row["delivery_id"], now=NOW - timedelta(days=1))
+        competitor.finish(row["delivery_id"], token, state="unknown")
+        return prepared
+
+    monkeypatch.setattr(store, "_scan", change)
+    assert send(store, post)["state"] == "empty"
+    assert post.payloads == []
+    rows = store.status()["deliveries"]
+    assert len(rows) == 1 and rows[0]["state"] == "unknown"
+    with storage._connect() as conn:
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM watch_notifications WHERE kst_day='2026-10-10'"
+            ).fetchone()[0]
+            == 0
+        )
+
+
+def test_real_clock_refreshed_after_scan_crossing_quiet_hour(setup, monkeypatch):
+    storage, _, _ = setup
+    candidates(storage)
+    store = api(storage)
+    store.set_enabled(True, confirm=True)
+    from msalt.watch import notification_store
+
+    actual_clock = notification_store.clock
+    times = iter([NOW.replace(hour=11, minute=59), NOW.replace(hour=12, minute=0)])
+    monkeypatch.setattr(
+        notification_store,
+        "clock",
+        lambda now=None: actual_clock(now) if now is not None else next(times),
+    )
+    assert store.prepare(TARGET)["state"] == "quiet"
+    assert store.status()["deliveries"] == []
+
+
+def test_fifo_stops_at_older_indivisible_item_that_fits_only_next_message(setup):
+    storage, _, _ = setup
+    candidates(storage, 3)
+    with storage._connect() as conn:
+        for identifier, length in [(1, 2800), (2, 600)]:
+            row = conn.execute(
+                "SELECT id,input_snapshot FROM watch_evaluations WHERE article_id=?", (identifier,)
+            ).fetchone()
+            snapshot = json.loads(row["input_snapshot"])
+            snapshot["article"]["url"] = f"https://long/{identifier}/" + "x" * length
+            conn.execute(
+                "UPDATE watch_evaluations SET input_snapshot=? WHERE id=?",
+                (json.dumps(snapshot), row["id"]),
+            )
+    store, post = api(storage), Post()
+    store.set_enabled(True, confirm=True)
+    assert send(store, post)["state"] == "sent"
+    assert "GPU news 1" in post.payloads[0]["text"]
+    assert "GPU news 2" not in post.payloads[0]["text"]
+    assert "GPU news 3" not in post.payloads[0]["text"]
+    assert send(store, post, NOW + timedelta(hours=1))["state"] == "sent"
+    assert post.payloads[1]["text"].index("GPU news 2") < post.payloads[1]["text"].index(
+        "GPU news 3"
+    )
