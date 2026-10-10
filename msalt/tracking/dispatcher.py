@@ -8,6 +8,8 @@ from inspect import Parameter, signature
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from msalt.tracking.delivery_errors import DeliveryRejected
+from msalt.tracking.delivery_store import DeliveryCandidate, DeliveryStore
 from msalt.tracking.items import TrackedItemManager
 from msalt.tracking.records import RecordManager
 
@@ -33,6 +35,7 @@ class DispatchTarget:
     kind: Literal["scheduled", "retry"]
     item: dict
     recorded_for: str
+    slot_utc: str = ""
 
 
 def _parse_hhmm(s: str) -> tuple[int, int]:
@@ -244,7 +247,6 @@ class Dispatcher:
 
         storage = self.records.storage
         batch_targets: list[DispatchTarget] = []
-        batch_messages: list[DispatchMessage] = []
         retry_slot_kst = _retry_slot_in_window(now_kst, window_start_kst)
         retry_slot_utc_str = (
             retry_slot_kst.astimezone(timezone.utc).strftime(UTC_TS_FORMAT)
@@ -261,7 +263,7 @@ class Dispatcher:
                     else storage.has_record_since(it["id"], it["pending_since"])
                 )
                 if has_pending_record:
-                    storage.clear_pending(it["id"])
+                    storage.clear_pending(it["id"], expected_since=it["pending_since"])
                     it["pending_since"] = None
                     it["pending_recorded_for"] = None
 
@@ -269,7 +271,7 @@ class Dispatcher:
             if it.get("pending_since"):
                 next_slot_kst = _next_schedule_slot_after(it, it["pending_since"])
                 if now_kst >= next_slot_kst:
-                    storage.clear_pending(it["id"])
+                    storage.clear_pending(it["id"], expected_since=it["pending_since"])
                     it["pending_since"] = None
                     it["pending_recorded_for"] = None
 
@@ -282,9 +284,9 @@ class Dispatcher:
                         kind="scheduled",
                         item=it,
                         recorded_for=slot_today_kst.date().isoformat(),
+                        slot_utc=slot_today_kst.astimezone(timezone.utc).isoformat(),
                     )
                     batch_targets.append(target)
-                    batch_messages.append(_message_for(target))
                 continue
 
             # 4. retry — pending이고 글로벌 retry 슬롯이 윈도우 안
@@ -296,22 +298,33 @@ class Dispatcher:
                         item=it,
                         recorded_for=it.get("pending_recorded_for")
                         or _fallback_recorded_for_from_pending(it["pending_since"]),
+                        slot_utc=retry_slot_kst.astimezone(timezone.utc).isoformat(),
                     )
                     batch_targets.append(target)
-                    batch_messages.append(_message_for(target))
 
-        # 5. 한 메시지로 묶어 발송
-        if batch_targets:
+        # Commit all claims before calling the external sender. A crash leaves them
+        # unresolved, so later scheduled windows and retry slots fail closed.
+        deliveries = DeliveryStore(storage)
+        claims = deliveries.claim([
+            DeliveryCandidate(t.item["id"], t.recorded_for, t.kind, t.slot_utc)
+            for t in batch_targets
+        ], now_utc_str) if batch_targets else []
+        claimed_keys = {(c["item_id"], c["recorded_for"], c["kind"]) for c in claims}
+        claimed_targets = [t for t in batch_targets
+                           if (t.item["id"], t.recorded_for, t.kind) in claimed_keys]
+        if not claimed_targets:
+            return []
+        ids = [c["id"] for c in claims]
+        try:
             self._send_batch(
-                _format_batch(batch_targets),
-                _reply_keyboard_for_items(batch_targets),
+                _format_batch(claimed_targets),
+                _reply_keyboard_for_items(claimed_targets),
             )
-            for target in batch_targets:
-                it = target.item
-                if not it.get("pending_since"):
-                    storage.set_pending_since(
-                        it["id"], now_utc_str, target.recorded_for
-                    )
-                storage.set_last_asked_at(it["id"], now_utc_str)
-
-        return batch_messages
+        except DeliveryRejected:
+            deliveries.finish(ids, "rejected", now_utc_str)
+            raise
+        except Exception:
+            deliveries.finish(ids, "unknown", now_utc_str)
+            raise
+        deliveries.finish(ids, "sent", now_utc_str)
+        return [_message_for(target) for target in claimed_targets]

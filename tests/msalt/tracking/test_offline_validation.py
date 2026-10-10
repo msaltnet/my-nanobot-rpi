@@ -367,7 +367,7 @@ def test_null_value_is_counted_as_recorded_but_not_done(tracking):
     assert store.record_exists(items.get("운동")["id"], "2026-10-08")
 
 
-def test_repeated_scheduled_window_resends_after_database_reopen(tracking):
+def test_repeated_scheduled_window_does_not_resend_after_database_reopen(tracking):
     db, store, items, records = tracking
     items.add("운동", "boolean", None, "08:00")
     sent = []
@@ -377,21 +377,19 @@ def test_repeated_scheduled_window_resends_after_database_reopen(tracking):
     Dispatcher(reopened_items, RecordManager(reopened, reopened_items), sent.append).run(
         datetime(2026, 10, 9, 8, 1, tzinfo=KST)
     )
-    assert len(sent) == 2
+    assert len(sent) == 1
     assert all("2026-10-09" in text for text in sent)
     assert store.get_tracked_item_by_name("운동")["pending_recorded_for"] == "2026-10-09"
 
 
-def test_send_then_state_failure_allows_duplicate_after_restart(tracking, monkeypatch):
+def test_send_then_state_failure_blocks_duplicate_after_restart(tracking):
     db, store, items, records = tracking
     items.add("운동", "boolean", None, "08:00")
     sent = []
-
-    def fail_pending(*args, **kwargs):
-        raise sqlite3.OperationalError("synthetic pending failure")
-
-    monkeypatch.setattr(store, "set_pending_since", fail_pending)
-    with pytest.raises(sqlite3.OperationalError, match="synthetic pending failure"):
+    with store._connect() as conn:
+        conn.execute("CREATE TRIGGER fail_pending BEFORE UPDATE OF pending_since ON tracked_items "
+                     "BEGIN SELECT RAISE(ABORT, 'synthetic pending failure'); END")
+    with pytest.raises(sqlite3.IntegrityError, match="synthetic pending failure"):
         Dispatcher(items, records, sent.append).run(datetime(2026, 10, 9, 8, 0, tzinfo=KST))
     assert len(sent) == 1
     assert store.get_tracked_item_by_name("운동")["pending_since"] is None
@@ -401,7 +399,7 @@ def test_send_then_state_failure_allows_duplicate_after_restart(tracking, monkey
     Dispatcher(reopened_items, RecordManager(reopened, reopened_items), sent.append).run(
         datetime(2026, 10, 9, 8, 1, tzinfo=KST)
     )
-    assert len(sent) == 2
+    assert len(sent) == 1
 
 
 @pytest.mark.parametrize(
@@ -422,7 +420,7 @@ def test_schedule_window_timezone_and_exclusive_start(tracking, now, expected):
 
 
 @pytest.mark.parametrize("status,ok", [(401, False), (200, False)])
-def test_sender_rejection_keeps_outbound_and_pending_unset(
+def test_sender_rejection_keeps_outbound_unset_and_retains_pending_target(
     tracking, tmp_path, monkeypatch, status, ok
 ):
     _, store, items, records = tracking
@@ -441,8 +439,8 @@ def test_sender_rejection_keeps_outbound_and_pending_unset(
     history = SessionManager(workspace).get_or_create("telegram:123").get_history()
     assert history == []
     item = store.get_tracked_item_by_name("운동")
-    assert item["pending_since"] is None
-    assert item["pending_recorded_for"] is None
+    assert item["pending_since"] == "2026-10-08 23:00:00"
+    assert item["pending_recorded_for"] == "2026-10-09"
     assert item["last_asked_at"] is None
 
 

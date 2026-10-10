@@ -104,7 +104,7 @@ def test_sender_transport_error_is_unknown_and_secret_free(
     (429, {"error": "rate limit"}, DeliveryUnknown),
     (500, ValueError("invalid JSON"), DeliveryUnknown),
 ])
-def test_dispatcher_keeps_state_unset_without_ack(
+def test_dispatcher_no_last_success_without_ack_and_rejected_retains_target(
     tmp_path, monkeypatch, status, body, classification
 ):
     db = tmp_path / "tracking.db"
@@ -117,8 +117,12 @@ def test_dispatcher_keeps_state_unset_without_ack(
     with pytest.raises(classification):
         dispatcher.run(datetime(2026, 10, 9, 8, 0, tzinfo=ZoneInfo("Asia/Seoul")))
     item = store.get_tracked_item_by_name("운동")
-    assert item["pending_since"] is None
-    assert item["pending_recorded_for"] is None
+    if classification is DeliveryRejected:
+        assert item["pending_since"] == "2026-10-08 23:00:00"
+        assert item["pending_recorded_for"] == "2026-10-09"
+    else:
+        assert item["pending_since"] is None
+        assert item["pending_recorded_for"] is None
     assert item["last_asked_at"] is None
     assert SessionManager(tmp_path).get_or_create("telegram:123").get_history() == []
 

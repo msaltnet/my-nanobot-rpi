@@ -69,6 +69,8 @@ class Storage:
                     conn.execute(statement)
             from msalt.news.delivery_schema import migrate
             migrate(conn)
+            from msalt.tracking.delivery_schema import migrate as migrate_tracking
+            migrate_tracking(conn)
             cols = {row[1] for row in conn.execute("PRAGMA table_info(tracked_items)")}
             if "last_missed_asked_date" not in cols:
                 conn.execute(
@@ -260,16 +262,20 @@ class Storage:
         finally:
             conn.close()
 
-    def clear_pending(self, item_id: int) -> None:
+    def clear_pending(self, item_id: int, *, expected_since: str | None = None) -> None:
         """답이 들어오거나 다음 schedule_slot 도래 시 호출."""
         conn = self._connect()
         try:
-            conn.execute(
+            sql = (
                 "UPDATE tracked_items "
                 "SET pending_since = NULL, pending_recorded_for = NULL "
-                "WHERE id = ?",
-                (item_id,),
+                "WHERE id = ?"
             )
+            params = (item_id,)
+            if expected_since is not None:
+                sql += " AND pending_since = ?"
+                params = (item_id, expected_since)
+            conn.execute(sql, params)
             conn.commit()
         finally:
             conn.close()

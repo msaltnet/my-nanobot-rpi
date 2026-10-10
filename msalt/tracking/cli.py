@@ -14,6 +14,7 @@ from loguru import logger
 
 from msalt.storage import Storage
 from msalt.tracking.delivery_errors import DeliveryRejected, DeliveryUnknown
+from msalt.tracking.delivery_store import DeliveryStore
 from msalt.tracking.dispatcher import (
     Dispatcher,
     ReplyKeyboard,
@@ -67,6 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_sum.add_argument("--ref", help="reference date YYYY-MM-DD",
                        default=None)
 
+    sub.add_parser("delivery-status", help="show non-secret tracking delivery ledger")
+    p_release = sub.add_parser("delivery-release", help="release an unresolved ID for later retry")
+    p_release.add_argument("delivery_id", type=int)
+    p_release.add_argument("--confirm-received", action="store_true",
+                           help="confirm receipt was checked before allowing a later retry")
     return p
 
 
@@ -156,6 +162,20 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
 
     storage = Storage(db_path)
     storage.initialize()
+    if args.cmd == "delivery-status":
+        print(json.dumps(DeliveryStore(storage).status(), ensure_ascii=False))
+        return 0
+    if args.cmd == "delivery-release":
+        try:
+            DeliveryStore(storage).release(
+                args.delivery_id, confirmed_received=args.confirm_received,
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"Released delivery {args.delivery_id}; only a later retry slot is eligible")
+        return 0
+
     items = TrackedItemManager(storage)
     items.seed_defaults()
     records = RecordManager(storage, items)
