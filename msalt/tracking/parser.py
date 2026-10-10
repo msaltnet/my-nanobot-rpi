@@ -145,7 +145,7 @@ class NaturalLanguageParser:
                 value_json=value_json,
                 confidence=float(confidence),
             )
-        except (json.JSONDecodeError, ValueError, TypeError):
+        except (json.JSONDecodeError, ValueError, TypeError, OverflowError):
             return ParsedRecord(
                 item_name=None, recorded_for=now[:10],
                 value_text=None, value_num=None, value_bool=None,

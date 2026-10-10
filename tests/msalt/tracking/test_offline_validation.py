@@ -197,9 +197,17 @@ def test_fake_parser_timeout_does_not_create_record(tracking):
     assert not store.record_exists(items.get("운동")["id"], "2026-10-09")
 
 
-@pytest.mark.parametrize("payload", ["[]", "null"])
-def test_fake_parser_top_level_non_object_returns_no_match_without_record(tracking, payload):
-    _, store, items, _ = tracking
+@pytest.mark.parametrize("payload,expected_count", [
+    ('{"item_name":"운동","recorded_for":"2026-10-09",'
+     '"value_bool":true,"confidence":0.9}', 1),
+    ("[]", 0),
+    ("null", 0),
+    ('{"item_name":["secret-model-output-marker"],"confidence":0.9}', 0),
+])
+def test_fake_parser_response_controls_cli_record_creation(
+    tracking, capsys, payload, expected_count
+):
+    db, store, items, _ = tracking
     items.add("운동", "boolean", None, "22:00")
     client = SimpleNamespace(
         chat=SimpleNamespace(
@@ -213,10 +221,21 @@ def test_fake_parser_top_level_non_object_returns_no_match_without_record(tracki
     parsed = NaturalLanguageParser(client, "synthetic-model").parse_record(
         "운동했어", items.list_all(), "2026-10-09T08:00:00+09:00"
     )
-    assert parsed.item_name is None
-    assert parsed.confidence == 0.0
     assert parsed.recorded_for == "2026-10-09"
-    assert not store.record_exists(items.get("운동")["id"], "2026-10-09")
+    if parsed.item_name is not None:
+        assert run_command(
+            ["record", parsed.item_name, "--date", parsed.recorded_for,
+             "--bool" if parsed.value_bool is True else "--no-bool",
+             "--raw", "운동했어"],
+            db_path=str(db),
+        ) == 0
+    else:
+        assert parsed.confidence == 0.0
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM records").fetchone()[0] == expected_count
+    assert store.record_exists(items.get("운동")["id"], "2026-10-09") == bool(expected_count)
+    captured = capsys.readouterr()
+    assert "secret-model-output-marker" not in captured.out + captured.err
 
 
 def test_batch_second_save_failure_leaves_first_commit_and_no_second_success(tracking, capsys):
