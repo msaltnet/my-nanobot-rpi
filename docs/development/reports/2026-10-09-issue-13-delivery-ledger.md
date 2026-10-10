@@ -1,5 +1,9 @@
 # Verification Report — Issue #13 delivery ledger v1.1
 
+## 현재 비용 결정 — 2026-10-10 KST
+금액 상한은 사용자가 각 API·서비스 설정에서 관리한다. 앱 US$5 hard enforcement/#25 구현은 #7의 필수 선행 조건에서 제외했다. US$5/US$4는 운영자 관리·관찰 기준이며 앱 자동 차단 보장이 아니다. 기존 전달 안전성·호출 ceiling은 유지하고 새로운 비용/횟수 제한 기능은 추가하지 않는다. 아래 2026-10-09 결과는 당시 SHA 이력이다. 과거 총비용 강제 차단 필수 문구보다 [최신 Human 결정](https://github.com/msaltnet/my-nanobot-rpi/issues/7)이 우선하며 새 통합 후보 검증을 대신하지 않는다. 별도 운영 적용/발송/유료 호출·백업/rollback·Human 수용/명시적 병합 Gate는 유지한다.
+
+
 ## Context
 
 - Issue / 승인 설계 버전: #13 v1.1. Human의 “승인할께”와 유일한 Ready for Implementation 상태를 부모 작업이 확인했다. 구현·후보 준비 범위이며 실제 발송·운영 배포·병합 승인은 포함하지 않는다.
