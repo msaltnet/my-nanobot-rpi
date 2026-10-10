@@ -153,6 +153,66 @@ def test_parse_record_handles_invalid_json_gracefully():
     assert result.confidence == 0.0
 
 
+@pytest.mark.parametrize("payload", [
+    "[]", "null", '"record"', "42", "true", "not json at all",
+])
+def test_parse_record_rejects_non_object_response_with_exact_fallback(payload):
+    parser = NaturalLanguageParser(_mock_client_with(payload), "synthetic-model")
+    result = parser.parse_record("운동했어", [], "2026-10-09T08:00:00+09:00")
+    assert result == ParsedRecord(None, "2026-10-09", None, None, None, None, 0.0)
+
+
+@pytest.mark.parametrize("field,bad_value", [
+    ("item_name", 7), ("item_name", True), ("item_name", {}),
+    ("value_text", 7), ("value_text", False), ("value_text", []),
+    ("value_num", "7"), ("value_num", True), ("value_num", []),
+    ("value_num", float("nan")), ("value_num", float("inf")),
+    ("value_num", float("-inf")),
+    ("value_bool", 1), ("value_bool", "true"),
+    ("value_json", []), ("value_json", "{}"),
+    ("confidence", "0.9"), ("confidence", True),
+    ("confidence", None), ("confidence", float("nan")),
+    ("confidence", float("inf")), ("confidence", -0.01),
+    ("confidence", 1.01),
+    ("recorded_for", 20261009), ("recorded_for", True),
+    ("recorded_for", "2026-02-30"), ("recorded_for", "2026-10-09T12:00:00"),
+])
+def test_parse_record_rejects_wrong_field_type_or_value(field, bad_value):
+    payload = {"item_name": "운동", "recorded_for": "2026-10-09",
+               "value_text": None, "value_num": 3, "value_bool": None,
+               "value_json": None, "confidence": 0.9}
+    payload[field] = bad_value
+    parser = NaturalLanguageParser(_mock_client_with(json.dumps(payload)), "synthetic-model")
+    result = parser.parse_record("운동했어", [], "2026-10-09T08:00:00+09:00")
+    assert result == ParsedRecord(None, "2026-10-09", None, None, None, None, 0.0)
+
+
+@pytest.mark.parametrize("date_field", [{}, {"recorded_for": None}, {"recorded_for": ""}])
+def test_parse_record_missing_null_or_empty_date_uses_reference_date(date_field):
+    payload = {"item_name": "운동", "confidence": 1, "value_num": 0}
+    payload.update(date_field)
+    parser = NaturalLanguageParser(_mock_client_with(json.dumps(payload)), "synthetic-model")
+    result = parser.parse_record("운동했어", [], "2026-10-09T08:00:00+09:00")
+    assert result == ParsedRecord("운동", "2026-10-09", None, 0, None, None, 1.0)
+
+
+def test_parse_record_empty_object_uses_missing_field_defaults():
+    parser = NaturalLanguageParser(_mock_client_with("{}"), "synthetic-model")
+    result = parser.parse_record("운동했어", [], "2026-10-09T08:00:00+09:00")
+    assert result == ParsedRecord(None, "2026-10-09", None, None, None, None, 0.0)
+
+
+def test_parse_record_malformed_response_does_not_log_raw_content(capsys, caplog):
+    marker = "secret-model-output-marker"
+    parser = NaturalLanguageParser(
+        _mock_client_with(json.dumps({"item_name": [marker]})), "synthetic-model"
+    )
+    result = parser.parse_record("운동했어", [], "2026-10-09T08:00:00+09:00")
+    assert result.item_name is None
+    captured = capsys.readouterr()
+    assert marker not in captured.out + captured.err + caplog.text
+
+
 def test_parse_item_intent_extracts_fields():
     payload = {
         "name": "독서",

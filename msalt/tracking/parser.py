@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from msalt.tracking.alcohol import alcohol_profiles_for_prompt
@@ -101,15 +103,47 @@ class NaturalLanguageParser:
         raw = self._chat(_RECORD_SYSTEM, user)
         try:
             data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise ValueError("record response must be an object")
+
+            for field in ("item_name", "value_text"):
+                value = data.get(field)
+                if value is not None and not isinstance(value, str):
+                    raise ValueError(f"invalid {field} type")
+            value_num = data.get("value_num")
+            if value_num is not None and (
+                isinstance(value_num, bool)
+                or not isinstance(value_num, (int, float))
+                or not math.isfinite(value_num)
+            ):
+                raise ValueError("invalid value_num")
+            value_bool = data.get("value_bool")
+            if value_bool is not None and not isinstance(value_bool, bool):
+                raise ValueError("invalid value_bool type")
+            value_json = data.get("value_json")
+            if value_json is not None and not isinstance(value_json, dict):
+                raise ValueError("invalid value_json type")
+            confidence = data.get("confidence", 0)
+            if (isinstance(confidence, bool)
+                    or not isinstance(confidence, (int, float))
+                    or not math.isfinite(confidence)
+                    or not 0 <= confidence <= 1):
+                raise ValueError("invalid confidence")
+            recorded_for = data.get("recorded_for")
+            if recorded_for is None or recorded_for == "":
+                recorded_for = now[:10]
+            if (not isinstance(recorded_for, str)
+                    or len(recorded_for) != 10
+                    or date.fromisoformat(recorded_for).isoformat() != recorded_for):
+                raise ValueError("invalid recorded_for")
             return ParsedRecord(
                 item_name=data.get("item_name"),
-                recorded_for=data.get("recorded_for") or now[:10],
+                recorded_for=recorded_for,
                 value_text=data.get("value_text"),
-                value_num=data.get("value_num"),
-                value_bool=data.get("value_bool"),
-                value_json=data.get("value_json")
-                if isinstance(data.get("value_json"), dict) else None,
-                confidence=float(data.get("confidence", 0)),
+                value_num=value_num,
+                value_bool=value_bool,
+                value_json=value_json,
+                confidence=float(confidence),
             )
         except (json.JSONDecodeError, ValueError, TypeError):
             return ParsedRecord(

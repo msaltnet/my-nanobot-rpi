@@ -198,8 +198,7 @@ def test_fake_parser_timeout_does_not_create_record(tracking):
 
 
 @pytest.mark.parametrize("payload", ["[]", "null"])
-def test_fake_parser_top_level_non_object_raises_attribute_error(tracking, payload):
-    """Malformed but valid JSON escapes the parser's graceful-fallback handler."""
+def test_fake_parser_top_level_non_object_returns_no_match_without_record(tracking, payload):
     _, store, items, _ = tracking
     items.add("운동", "boolean", None, "22:00")
     client = SimpleNamespace(
@@ -211,10 +210,12 @@ def test_fake_parser_top_level_non_object_raises_attribute_error(tracking, paylo
             )
         )
     )
-    with pytest.raises(AttributeError):
-        NaturalLanguageParser(client, "synthetic-model").parse_record(
-            "운동했어", items.list_all(), "2026-10-09T08:00:00+09:00"
-        )
+    parsed = NaturalLanguageParser(client, "synthetic-model").parse_record(
+        "운동했어", items.list_all(), "2026-10-09T08:00:00+09:00"
+    )
+    assert parsed.item_name is None
+    assert parsed.confidence == 0.0
+    assert parsed.recorded_for == "2026-10-09"
     assert not store.record_exists(items.get("운동")["id"], "2026-10-09")
 
 
