@@ -185,7 +185,10 @@ def run_command(argv: list[str], *, db_path: str = DEFAULT_DB) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 2
         print(f"기록되었어: {args.name} {args.date}")
-        print(records.advice_after_record(args.name, args.date))
+        try:
+            print(records.advice_after_record(args.name, args.date))
+        except Exception:
+            print("기록은 저장했지만 조언을 만들지 못했어.")
         try:
             follow_up = _follow_up_payload(records, args.date)
         except Exception as exc:

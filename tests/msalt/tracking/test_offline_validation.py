@@ -4,6 +4,7 @@ The tests describe observed behavior. Passing reproductions are not acceptance o
 the product's duplicate-send or future-date behavior.
 """
 
+import json
 import socket
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
@@ -261,7 +262,9 @@ def test_batch_second_save_failure_leaves_first_commit_and_no_second_success(tra
             ["record", "물", "--date", "2026-10-08", "--num", "2", "--raw", "synthetic"],
             db_path=str(db),
         )
-    assert "기록되었어: 물" not in capsys.readouterr().out
+    failed_output = capsys.readouterr().out
+    assert "기록되었어: 물" not in failed_output
+    assert "FOLLOW_UP_JSON:" not in failed_output
     assert store.record_exists(items.get("운동")["id"], "2026-10-08")
     assert not store.record_exists(items.get("물")["id"], "2026-10-08")
 
@@ -291,7 +294,9 @@ def test_locked_sqlite_write_returns_no_success_and_preserves_record(tracking, c
     finally:
         lock.rollback()
         lock.close()
-    assert "기록되었어" not in capsys.readouterr().out
+    failed_output = capsys.readouterr().out
+    assert "기록되었어" not in failed_output
+    assert "FOLLOW_UP_JSON:" not in failed_output
     assert not store.record_exists(items.get("운동")["id"], "2026-10-08")
     assert records.recent("운동", 7, "2026-10-09")[0]["raw_input"] == "existing"
 
@@ -306,14 +311,19 @@ def test_advice_failure_after_commit_leaves_saved_record_and_success_line(
         raise RuntimeError("synthetic advice failure")
 
     monkeypatch.setattr(RecordManager, "advice_after_record", fail_advice)
-    with pytest.raises(RuntimeError, match="synthetic advice failure"):
-        run_command(
-            ["record", "운동", "--date", "2026-10-08", "--bool", "--raw", "synthetic"],
-            db_path=str(db),
-        )
-    assert "기록되었어: 운동 2026-10-08" in capsys.readouterr().out
+    assert run_command(
+        ["record", "운동", "--date", "2026-10-08", "--bool", "--raw", "synthetic"],
+        db_path=str(db),
+    ) == 0
+    captured = capsys.readouterr()
+    assert "기록되었어: 운동 2026-10-08" in captured.out
+    assert "기록은 저장했지만 조언을 만들지 못했어." in captured.out
+    assert "synthetic advice failure" not in captured.out + captured.err
+    follow_up_line = next(
+        line for line in captured.out.splitlines() if line.startswith("FOLLOW_UP_JSON: ")
+    )
+    assert "question" in json.loads(follow_up_line.removeprefix("FOLLOW_UP_JSON: "))
     assert store.record_exists(items.get("운동")["id"], "2026-10-08")
-
 
 @pytest.mark.parametrize("days,start", [(7, "2026-10-03"), (30, "2026-09-10")])
 def test_period_start_and_ref_date_boundaries_exclude_future_rows(tracking, days, start):
