@@ -383,3 +383,71 @@ print(f'patched tools.exec.path_append -> {desired}')
 PY
 sudo systemctl restart my-nanobot-rpi
 ```
+
+## Watch 알림 후보 배포와 복귀
+
+Watch 관리/저장 기사 평가/알림은 하나의 SQLite DB를 사용한다. 알림은 새 DB에서
+기본 **disabled**다. 기존 DB의 enable 값을 반복 초기화가 덮어쓰지 않는다. 실제 운영 DB를
+업그레이드하거나 enable/dispatch할 때는 운영자가 단일 Linux 호스트(RPi 또는 OCI), 고정
+후보 SHA, 데이터/비용/Telegram 대상·실행 범위와 작업창을 지정하고 승인한다. 특정 SSH
+별칭·서버 사용자·경로를 공통 기본값으로 삼지 않는다. 이번 구현은 Watch timer/unit이나
+별도 기사 수집을 설치하지 않는다. 중복 gateway/dispatcher/timer가 없는지 확인한다.
+
+배포 전 모든 writer를 정지하거나 SQLite backup API로 일관된 DB·설정·workspace 백업을
+확보한다. 이전 SHA, 현재 후보, 비공개 대상/설정, 복원 검증과 롤백 순서를 운영자 기록에
+남긴다. `Storage.initialize`의 동일 BEGIN IMMEDIATE 안에서 기존 news/tracking/Watch
+행을 보존하고 알림 settings/deliveries/URL/candidate/attempt/audit 테이블을 additive 생성한다.
+기존 news ACK/unknown과 생활 기록/Watch 평가·revision/cursor를 확인하며 이력 삭제는 하지
+않는다. 구코드 복귀가 additive DB migration 자체를 되돌린다고 가정하지 않는다.
+
+운영 승인을 받기 전에는 알림을 disabled로 유지한다. 승인된 대상 DB에서
+`my-nanobot-rpi watch notify status --json`은 상태를 확인하며 외부 호출은 하지 않는다.
+`enable|disable --confirm`은 공유 DB 상태를 바꾸므로 명시적으로 승인된 변경이다.
+`dispatch --json`은 현재 allowFrom과 TELEGRAM_USER_ID로 허용된 단일 private recipient에
+최대 한 메시지를 보낼 수 있다. 기본 실제 UTC 시간을 사용한다. `--now ISO8601
+--diagnostic-time`은 승인된 격리 수동 진단에만 쓰고 production 시간/한도 우회에 쓰지 않는다.
+
+recipient별 KST 09:00 이상 21:00 미만, UTC 시간 슬롯당1개/KST 날짜당6개/최대3기사,
+메시지3,500자(UTF-16 단위도 제한)를 적용한다. pending/sending/sent/unknown/rejected와
+cancelled 슬롯도 일일 quota를 소비한다. 이미 ACK된 URL은 revision 변경으로 재발송하지
+않으며 뉴스 브리핑 이력과는 분리된다. 모델을 다시 생성하지 않고 저장한 평가 입력의
+제목·URL과 Watch 이유를 결정적으로 표시한다. 전역 FIFO의 중복 URL을 포함한 첫100개 eligible evaluation행의
+URL key만 검토하고 선택 URL마다 최대20개의 현재 Watch 이유를 모아 snapshot 메모리를
+제한한다. 너무 긴 URL/표시 불가능한 기사는 쪼개거나 URL을 자르지 않고 보류하며,
+이런 항목이 첫100개를 채우면 뒤 대기열 전달이 지연될 수 있다. 저장한 같은 URL의
+Watch별 이유가 여러 개면 가장 오래된 article ID/evaluation ID의 snapshot을 사용한다.
+
+발송 전에 slot/day/URL claim·payload/candidate snapshot을 commit하고, 마지막 검사를
+통과한 뒤 sending과 attempt를 commit한다. POST 중 DB transaction을 유지하지 않는다.
+같은 슬롯 pending은 재시작 후 재개할 수 있다. 다른 슬롯의 pending은 이전 quota를
+보존하며 cancelled로 남기고 새 슬롯에서 재구성한다. 최종 검사에서 어떤 후보든 paused,
+deleted, revision 변경 또는 global disabled이면 pending batch 전체를 cancelled로 바꾸고
+URL claim만 해제한다. 이미 소비한 URL attempt와 quota는 보존한다. sending은 취소/해제하지
+않는다. 이 검사가 끝난 직후 pause/disable과 외부 POST 사이의 race는 제거할 수 없으므로
+즉시 중지가 이미 진행된 POST의 미수신을 보장한다고 안내하지 않는다.
+
+HTTP2xx와 JSON 객체 `ok is True` 및 양의 message ID를 확인한 경우만 sent다. JSON 객체
+`ok is False`는 HTTP 상태와 무관하게 rejected다. timeout/비객체/malformed/불명확한 HTTP
+응답/중단/ACK 저장 실패는 unknown 또는 unresolved sending으로 남긴다. dispatcher 시작 시
+sending을 unknown으로 보존하고 자동 만료/재시도하지 않는다. status 조회는 recovery를 하지
+않는다. disabled 상태의 명시 dispatch도 DB recovery만 하며 외부 호출하지 않는다. 동시 worker
+startup이 진행 중 sending을 unknown으로 바꾸더라도 같은 owner의 늦은 ACK만 반영할 수 있고,
+operator resolution은 owner를 제거하여 늦은 결과가 결정을 덮어쓰지 못하게 한다.
+
+unknown을 해결하기 전 관련 worker를 정지하고 실제 수신/미수신을 확인한다. operator
+`resolve ID --outcome sent --evidence "수신 확인 근거" --message-id ID --confirm`은 POST0으로
+receipt/audit만 저장한다. `--outcome retry --evidence "미수신/재시도 근거" --confirm`은 다음
+명시적 dispatch의 새 claim을 허용하며 실제 attempt 총2회·새 slot/day quota를 그대로 적용한다.
+rejected 자동 추가 시도도 새 슬롯의 단 한 번이며 SDK/transport 자동 retry는 없다. crash가
+POST 직전 일어나면 sending 예약을 보수적으로 소비한다. sending을 operator가 직접 취소/해제하지
+않는다. raw payload/recipient와 수신 근거는 private DB에만 보존하고 공개 보고서에 싣지 않는다.
+
+복귀는 **notifier disabled → 모든 관련 worker 중지 → 현재 DB/ACK/unknown/attempt ledger를
+보존 → 승인된 이전 코드로 복귀 → 상태/기존 기능 확인** 순서다. 원장을 옛 DB 백업으로
+덮어쓰면 ACK/unknown claim을 잃어 중복 발송할 수 있으므로 코드 복귀에 그렇게 하지 않는다.
+unknown 자동 retry나 ledger 삭제를 복귀 절차에 넣지 않는다. 실제 데이터 복원은 별도 데이터
+영향 승인과 일관된 백업/복원 검증이 필요하다.
+
+W11-6은 실제 승인 대상의 수신, 관련성/중요도 표본, 유용성과 알림 부담을 Human이 직접
+확인하고 수용해야 한다. 관찰 시간·알림/모델 비용 상한과 중지 수단을 배포 승인에서 정한다.
+합성 fixture PASS와 Bot API ACK가 실제 수신/Human 수용/병합 승인을 대신하지 않는다.

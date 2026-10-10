@@ -49,6 +49,24 @@ def build_parser() -> argparse.ArgumentParser:
     child.add_argument('--watch-id', type=int)
     child.add_argument('--status')
     child.add_argument('--limit', type=int, default=100)
+    child = sub.add_parser('notify', help='Operator Watch delivery control')
+    child.add_argument('--json', action='store_true', default=argparse.SUPPRESS)
+    commands = child.add_subparsers(dest='notify_command', required=True)
+    for name in ('status', 'dispatch', 'enable', 'disable', 'resolve'):
+        command = commands.add_parser(name)
+        command.add_argument('--json', action='store_true', default=argparse.SUPPRESS)
+        if name == 'status':
+            command.add_argument('--limit', type=int, default=100)
+        elif name == 'dispatch':
+            command.add_argument('--now', help='ISO8601 diagnostic time; requires --diagnostic-time')
+            command.add_argument('--diagnostic-time', action='store_true')
+        else:
+            command.add_argument('--confirm', action='store_true')
+            if name == 'resolve':
+                command.add_argument('delivery_id')
+                command.add_argument('--outcome', required=True, choices=('sent','retry'))
+                command.add_argument('--evidence')
+                command.add_argument('--message-id', type=int)
     return parser
 
 
@@ -64,6 +82,8 @@ def _emit(data, *, structured: bool) -> None:
         print(json.dumps(data, ensure_ascii=False))
     elif isinstance(data, dict) and "error" in data:
         print(data["error"], file=sys.stderr)
+    elif isinstance(data, dict) and ('enabled' in data or 'state' in data or 'outcome' in data):
+        print(json.dumps(data, ensure_ascii=False))
     else:
         rows = data if isinstance(data, list) else [data]
         if not rows:
@@ -86,6 +106,47 @@ def _emit(data, *, structured: bool) -> None:
             print("excluded=" + json.dumps(item["excluded_keywords"], ensure_ascii=False))
 
 
+
+def _notify(args, storage):
+    from msalt.watch.notification_store import NotificationStore, clock
+    notifications = NotificationStore(storage)
+    if args.notify_command == 'status':
+        return notifications.status(limit=args.limit)
+    if args.notify_command in ('enable', 'disable'):
+        return notifications.set_enabled(args.notify_command == 'enable', confirm=args.confirm)
+    if args.notify_command == 'resolve':
+        return notifications.resolve(args.delivery_id, outcome=args.outcome, confirm=args.confirm,
+                                     evidence=args.evidence, message_id=args.message_id)
+    now = None
+    if args.now is not None:
+        if not args.diagnostic_time:
+            raise ValueError('--now requires explicit --diagnostic-time; production uses actual time')
+        from datetime import datetime
+        try:
+            now = clock(datetime.fromisoformat(args.now))
+        except ValueError:
+            raise ValueError('now must be a timezone-aware ISO8601 datetime') from None
+    if not notifications.status()['enabled']:
+        notifications.recover()
+        return {'state': 'disabled', 'delivery_id': None}
+    # Existing allowFrom/private recipient configuration is the same news boundary.
+    import asyncio
+    import os
+
+    from msalt.cli import _load_dotenv
+    from msalt.news.reply_tool import authorized_target
+    from msalt.watch.dispatcher import Dispatcher
+    from msalt.watch.sender import BotAPI
+    _load_dotenv()
+    target = os.environ.get('TELEGRAM_USER_ID', '').strip()
+    try:
+        token = authorized_target(target)
+    except ValueError:
+        raise ValueError('Watch Telegram target configuration unavailable') from None
+    print('Watch dispatch may send one Telegram message; no model calls.', file=sys.stderr)
+    return asyncio.run(Dispatcher(notifications, post=BotAPI(token)).run(target, now=now))
+
+
 def run_command(argv: list[str], *, db_path: str | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
@@ -99,7 +160,9 @@ def run_command(argv: list[str], *, db_path: str | None = None) -> int:
         return 1
     store = WatchStore(storage)
     try:
-        if args.command in {'evaluate', 'evaluations'}:
+        if args.command == 'notify':
+            result = _notify(args, storage)
+        elif args.command in {'evaluate', 'evaluations'}:
             from msalt.watch.evaluation import Evaluator
             from msalt.watch.evaluation_store import EvaluationStore
             evaluations = EvaluationStore(storage)
