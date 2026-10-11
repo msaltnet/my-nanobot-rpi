@@ -6,6 +6,7 @@ import asyncio
 import json
 
 from msalt.news.sender import BotAPI  # Shared one-POST transport and credential log filter.
+from msalt.watch import notification_store
 
 __all__ = ["BotAPI", "NotificationSender", "classify"]
 
@@ -47,8 +48,18 @@ class NotificationSender:
             return self.store.show(identifier)["state"]
         try:
             async with asyncio.timeout(20):
-                status, body = await self.post(payload)
-            state, message_id, code = classify(status, body)
+                # A DELETE-journal reader can delay the durable sending COMMIT.
+                # Recheck its immutable reservation immediately before transport.
+                current = notification_store.clock(now)
+                slot = current.replace(minute=0, second=0, microsecond=0).isoformat()
+                if (
+                    row["slot_utc"] != slot
+                    or not 9 <= current.astimezone(notification_store.KST).hour < 21
+                ):
+                    state, message_id, code = "unknown", None, "pre_post_window_missed"
+                else:
+                    status, body = await self.post(payload)
+                    state, message_id, code = classify(status, body)
         except asyncio.CancelledError:
             self._uncertain(identifier, token, "post_cancelled")
             raise
@@ -59,5 +70,9 @@ class NotificationSender:
                 identifier, token, state=state, message_id=message_id, error_code=code
             )
         except Exception:
-            self._uncertain(identifier, token, "ack_storage_failed")
+            self._uncertain(
+                identifier,
+                token,
+                code if code == "pre_post_window_missed" else "ack_storage_failed",
+            )
         return self.store.show(identifier)["state"]

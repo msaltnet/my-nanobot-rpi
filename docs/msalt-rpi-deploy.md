@@ -427,11 +427,17 @@ SQLite DELETE journal의 SHARED reader는 writer COMMIT을 지연시킬 수 있�
 어떤 선택 후보의 자격·입력·이유나 URL claim 상태가 달라지면 전체 준비 결과를 버리고
 새 quota/claim/POST 없이 다음 invocation에서 새로 읽는다. 스냅샷 읽기 뒤 새로 완료된
 더 오래된 article ID의 평가는 다음 invocation에서 본다. FIFO는 이 coherent read snapshot의
-전달 가능한 후보 기준이다. Production time은 긴 스캔 후 final claim과 sending 직전에
-실제 시계로 다시 읽어 hour/day/quiet 경계를 검사한다. 명시적 diagnostic --now는 고정이다.
+전달 가능한 후보 기준이다. Production time은 final claim과 sending의 BEGIN IMMEDIATE를
+획득한 뒤 실제 시계로 다시 읽어 hour/day/quiet 경계를 검사한다. 잠금 대기 전 시간을
+재사용하지 않는다. 명시적 diagnostic --now는 고정이다.
 
 발송 전에 slot/day/URL claim·payload/candidate snapshot을 commit하고, 마지막 검사를
-통과한 뒤 sending과 attempt를 commit한다. POST 중 DB transaction을 유지하지 않는다.
+통과한 뒤 sending과 attempt를 commit한다. 이 commit도 reader 때문에 기다릴 수 있으므로,
+commit 반환 후 HTTP 직전에 실제 시계와 저장한 슬롯/KST 시간 창을 다시 검사한다.
+이미 경계를 놓쳤다면 POST0으로 unknown/pre_post_window_missed를 보존한다. 결과 저장이
+실패하면 unresolved sending으로 남을 수 있으며, 소비한 attempt·URL claim·quota는
+반환하지 않고 자동 재시도하지 않는다. 실제 발송이 없었어도 일일 용량을 소비하며
+운영자의 근거 기반 확인이 필요할 수 있다. POST 중 DB transaction을 유지하지 않는다.
 같은 슬롯 pending은 재시작 후 재개할 수 있다. 다른 슬롯의 pending은 이전 quota를
 보존하며 cancelled로 남기고 새 슬롯에서 재구성한다. 최종 검사에서 어떤 후보든 paused,
 deleted, revision 변경 또는 global disabled이면 pending batch 전체를 cancelled로 바꾸고

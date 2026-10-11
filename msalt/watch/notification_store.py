@@ -309,19 +309,19 @@ class NotificationStore(EvaluationStore):
 
     def prepare(self, target, *, now=None):
         requested_now = now
-        now = clock(requested_now)
         key = target_key(target)
         with self._transaction() as conn:
+            now = clock(requested_now)
             existing = self._guard(conn, key, now)
             if existing is not None:
                 return existing
         sections, selected, snapshots, claims = self._scan(key)
-        # Refresh production time after an arbitrarily long readonly scan. Explicit
-        # diagnostic time stays fixed; sending independently refreshes real time.
-        now = clock(requested_now)
-        slot = now.replace(minute=0, second=0, microsecond=0).isoformat()
-        day = now.astimezone(KST).date().isoformat()
         with self._transaction() as conn:
+            # Both the scan and BEGIN IMMEDIATE can wait across time boundaries.
+            # Refresh only after acquiring the writer fence; diagnostic time is fixed.
+            now = clock(requested_now)
+            slot = now.replace(minute=0, second=0, microsecond=0).isoformat()
+            day = now.astimezone(KST).date().isoformat()
             existing = self._guard(conn, key, now)
             if existing is not None:
                 return existing
@@ -391,7 +391,7 @@ class NotificationStore(EvaluationStore):
             )
 
     def start_sending(self, identifier, *, now=None):
-        now = clock(now)
+        requested_now = now
         with self._transaction() as conn:
             row = conn.execute(
                 "SELECT * FROM watch_notifications WHERE delivery_id=?", (identifier,)
@@ -408,6 +408,7 @@ class NotificationStore(EvaluationStore):
                 "SELECT COUNT(*) FROM watch_notification_candidates WHERE delivery_id=?",
                 (identifier,),
             ).fetchone()[0]
+            now = clock(requested_now)
             slot = now.replace(minute=0, second=0, microsecond=0).isoformat()
             if (
                 not self._enabled(conn)
@@ -455,6 +456,7 @@ class NotificationStore(EvaluationStore):
             "post_uncertain",
             "ack_storage_failed",
             "post_cancelled",
+            "pre_post_window_missed",
         ):
             error_code = "post_uncertain"
         with self._transaction() as conn:
