@@ -148,6 +148,47 @@ def test_record_command_keeps_save_success_when_follow_up_fails(
     assert s.record_exists(items.get("수면")["id"], "2026-08-30")
 
 
+def test_record_command_advice_and_follow_up_failure_keep_upsert_success(
+    db_path, capsys, monkeypatch
+):
+    storage = Storage(db_path)
+    items = TrackedItemManager(storage)
+    items.add("수면", "duration", None, "08:00")
+
+    def fail_advice(*args, **kwargs):
+        raise RuntimeError("private advice error")
+
+    def fail_follow_up(*args, **kwargs):
+        raise RuntimeError("synthetic follow-up error")
+
+    monkeypatch.setattr(RecordManager, "advice_after_record", fail_advice)
+    monkeypatch.setattr(RecordManager, "find_recent_missing", fail_follow_up)
+
+    for value, raw in ((360, "6시간"), (420, "7시간")):
+        assert run_command(
+            ["record", "수면", "--date", "2026-08-30", "--num", str(value),
+             "--raw", raw],
+            db_path=db_path,
+        ) == 0
+        captured = capsys.readouterr()
+        assert "기록되었어: 수면 2026-08-30" in captured.out
+        assert "기록은 저장했지만 조언을 만들지 못했어." in captured.out
+        assert "private advice error" not in captured.out + captured.err
+        follow_up_line = next(
+            line for line in captured.out.splitlines()
+            if line.startswith("FOLLOW_UP_JSON: ")
+        )
+        assert json.loads(follow_up_line.removeprefix("FOLLOW_UP_JSON: ")) == {
+            "question": None,
+            "reply_keyboard": [],
+        }
+        assert "warning: follow-up unavailable: synthetic follow-up error" in captured.err
+
+    rows = storage.get_records_for_item(items.get("수면")["id"], 7, "2026-08-30")
+    assert len(rows) == 1
+    assert rows[0]["value_num"] == 420
+    assert rows[0]["raw_input"] == "7시간"
+
 def test_record_command_outputs_advice(db_path, capsys):
     s = Storage(db_path)
     items = TrackedItemManager(s)
