@@ -11,7 +11,8 @@ from nanobot.agent.tools.context import ToolContext, current_request_context
 from nanobot.agent.tools.message import _CURRENT_MESSAGE_SENDS
 from nanobot.agent.tools.schema import ArraySchema, StringSchema, tool_parameters_schema
 
-from msalt.tracking.cli import _make_reply_markup
+from msalt.tracking.cli import _make_reply_markup, _require_telegram_ack
+from msalt.tracking.delivery_errors import DeliveryRejected
 
 
 @tool_parameters(
@@ -73,11 +74,11 @@ class TrackingReplyTool(Tool):
                 response = await client.post(
                     f"https://api.telegram.org/bot{token}/sendMessage", json=payload,
                 )
-                response.raise_for_status()
-                if response.json().get("ok") is not True:
-                    return ToolResult.error("Error: Telegram rejected the tracking reply")
-        except (httpx.HTTPError, ValueError) as exc:
-            return ToolResult.error(f"Error: Telegram tracking reply failed: {type(exc).__name__}")
+                _require_telegram_ack(response)
+        except DeliveryRejected:
+            return ToolResult.error("Error: Telegram rejected the tracking reply")
+        except Exception:
+            return ToolResult.error("Error: Telegram tracking reply outcome unknown")
 
         # The upstream loop suppresses its normal reply when MessageTool records a
         # delivery to this turn's chat. Direct Bot API delivery needs the same mark.

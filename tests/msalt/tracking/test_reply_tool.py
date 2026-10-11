@@ -14,8 +14,7 @@ async def test_tracking_reply_sends_keyboard_and_suppresses_duplicate(monkeypatc
     posted = []
 
     class Response:
-        def raise_for_status(self):
-            pass
+        status_code = 200
 
         def json(self):
             return {"ok": True}
@@ -55,8 +54,7 @@ async def test_tracking_reply_removes_keyboard(monkeypatch):
     posted = []
 
     class Response:
-        def raise_for_status(self):
-            pass
+        status_code = 200
 
         def json(self):
             return {"ok": True}
@@ -97,8 +95,7 @@ async def test_tracking_reply_failure_allows_normal_response(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
 
     class Response:
-        def raise_for_status(self):
-            pass
+        status_code = 200
 
         def json(self):
             return {"ok": False}

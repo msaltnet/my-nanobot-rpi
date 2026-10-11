@@ -294,7 +294,7 @@ def test_dispatch_command_records_alert_in_matching_workspace(
     monkeypatch.setenv("TELEGRAM_USER_ID", "123")
 
     def fake_post(url, json, timeout):
-        return object()
+        return type("Response", (), {"status_code": 200, "json": lambda self: {"ok": True}})()
 
     monkeypatch.setattr("msalt.tracking.cli.httpx.post", fake_post)
 
@@ -332,6 +332,7 @@ def test_telegram_sender_posts_reply_markup(monkeypatch):
         posted["url"] = url
         posted["json"] = json
         posted["timeout"] = timeout
+        return type("Response", (), {"status_code": 200, "json": lambda self: {"ok": True}})()
 
     monkeypatch.setattr("msalt.tracking.cli.httpx.post", fake_post)
 
@@ -352,7 +353,7 @@ def test_telegram_sender_records_active_reminder_in_nanobot_session(
     monkeypatch.setenv("TELEGRAM_USER_ID", "123")
 
     def fake_post(url, json, timeout):
-        return object()
+        return type("Response", (), {"status_code": 200, "json": lambda self: {"ok": True}})()
 
     monkeypatch.setattr("msalt.tracking.cli.httpx.post", fake_post)
 

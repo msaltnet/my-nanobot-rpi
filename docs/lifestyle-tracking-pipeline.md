@@ -561,3 +561,50 @@ python -m ruff check msalt/tracking msalt/storage.py msalt/cli.py tests/msalt/tr
 - archive 기반 항목 삭제
 - dispatcher dry-run 명령
 - Telegram inline button으로 boolean 답변 처리
+
+## 영속 tracking 전달 원장과 운영 복구 (#17)
+
+Dispatcher는 `(item_id, recorded_for, kind, slot_utc)`를 고유 키로 삼는다. 예약 시각과
+기존 글로벌 retry 시각은 UTC로 정규화하며 KST 예약·30분 창·질문/키보드·batch 정책을
+유지한다. `BEGIN IMMEDIATE` 안에서 batch의 모든 eligible 항목을 claim하고 commit한
+뒤 외부 POST를 호출한다. 일부 키가 이미 있으면 그 항목만 제외하며 claim DB 오류면
+batch 전체를 rollback하고 POST하지 않는다. 네트워크 호출 동안 SQLite 쓰기 잠금을
+유지하지 않는다.
+
+- `claimed`: 발송 전에 영속 claim을 확보했다. 프로세스 중단이나 ACK 뒤 DB 저장
+  실패는 이 상태로 남아도 자동 재발송하지 않는다.
+- `sent`: #18의 strict Telegram ACK가 확인되고 pending/last_asked 갱신을 같은
+  transaction으로 저장했다. ACK 이후 session 기록 실패는 발송 성공을 바꾸지 않는다.
+- `rejected`: 완전한 Bot API JSON에서 `ok is False`를 확인했다. pending 대상일을
+  유지하고 last_asked 성공 시각을 변경하지 않는다. 같은 슬롯은 재전송하지 않고
+  실제 거절 완료 시각보다 뒤에 있는 다음 기존 retry 슬롯에서만 다시 시도할 수 있다.
+- `unknown`: timeout/transport/불완전한 응답 등 수신 결과가 불명확하다.
+  unresolved `claimed`/`unknown`은 같은 항목·대상일의 이후 retry도 차단한다.
+  자동 만료, lease 해제, 시간 경과에 의한 재전송은 없다.
+
+운영자는 `delivery-status`로 원장 ID, 항목 ID, 대상일, 슬롯과 상태만 조회할 수 있다.
+메시지 본문·항목명·토큰·chat ID·외부 오류 본문은 이 출력에 포함되지 않는다.
+실제 수신을 확인하고 이후 retry를 허용하기로 결정한 경우에만 명시적 원장 ID의
+`delivery-release`와 `--confirm-received` 확인 옵션을 사용할 수 있다. 복구 전에는
+운영 승인 범위에서 dispatcher 실행을 정지하고 진행 중인 실행이 종료되었는지 확인한다.
+이 해제는 ACK를 새로 기록하지 않으며 원래 상태와 고유 키를 tombstone으로 보존한다.
+따라서 같은 슬롯은 계속 거부하고 실제 해제 시각보다 뒤에 있는 다음 기존 retry 슬롯만
+허용한다. claim transaction 안에서 같은 항목·대상일의 거절 완료/해제 경계 시각을
+다시 읽으며, 해당 시각과 같거나 이전인 retry 슬롯은 제외한다. 예를 들어 09:05에
+거절되거나 해제되었다면 09:20 실행에서도 09:00 슬롯을 보내지 않고 14:00을 기다린다.
+원장 경계가 없는 기존 pending의 retry 정책은 유지한다. 이미 사용자가
+대상일에 응답했다면 pending을 복원하지 않는다. 이 문서는 실제 운영 복구 실행을
+승인하지 않으며 운영 원장 해제를 구현/검증 과정에서 실행하지 않는다.
+
+마이그레이션은 `Storage.initialize`의 기존 transaction에 tracking 테이블과 인덱스를
+추가한다. 기존 생활기록·항목·설정·뉴스 ACK/unknown 원장은 변경하지 않는다. 반복
+initialize가 기존 행을 보존한다. 항목 삭제 시 tracking 원장은 FK cascade로 함께
+정리되고 새 항목은 AUTOINCREMENT ID를 사용한다.
+
+배포는 별도 Human 승인 대상이다. 승인된 배포 전에 dispatcher를 정지하고 현재 SHA,
+설정 및 일관된 SQLite 백업을 확보하며 진행 중 원장 상태를 기록한다. 실패 시 현재
+DB/원장을 보존하고 발송을 중지한 상태에서 진단한다. 코드만 이전 버전으로 복귀해도
+tracking 원장은 사라지지 않는다. **원장을 조회하지 않는 구 dispatcher를 자동으로
+재활성화하면 중복 방지 보장을 잃으므로 자동 rollback에서 발송을 활성화하지 않는다.**
+DB 복원 역시 이후 기록과 발송 이력을 잃을 수 있으므로 운영자 판단·별도 승인 없이
+수행하지 않는다. 공개 PR에는 서버 경로·계정·개인 식별 정보가 없는 검증 근거만 남긴다.
