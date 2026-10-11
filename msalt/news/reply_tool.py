@@ -18,13 +18,24 @@ from msalt.storage import Storage
 
 
 def telegram_settings():
-    from nanobot.config.loader import load_config
+    from nanobot.config.loader import load_config, resolve_env_refs
+    from nanobot.utils.dict_keys import get_camel_snake
 
-    config = load_config()
-    telegram = config.channels.telegram
-    return os.environ.get("TELEGRAM_BOT_TOKEN", "").strip() or telegram.token, list(
-        telegram.allow_from
-    )
+    telegram = getattr(load_config().channels, "telegram", None)
+    if not isinstance(telegram, dict):
+        raise ValueError("news settings unavailable")
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip() or telegram.get("token", "")
+    allowed = get_camel_snake(telegram, "allowFrom", "allow_from", [])
+    if not isinstance(token, str) or not isinstance(allowed, list):
+        raise ValueError("news settings unavailable")
+    if any(not isinstance(value, str) for value in allowed):
+        raise ValueError("news settings unavailable")
+    # Resolve only the fields consumed here: unrelated provider references are lazy.
+    token = resolve_env_refs(token).strip()
+    allowed = [resolve_env_refs(value) for value in allowed]
+    if not token or "${" in token or any(not value or "${" in value for value in allowed):
+        raise ValueError("news settings unavailable")
+    return token, allowed
 
 
 def authorized_target(target, *, sender=None):
