@@ -1,0 +1,117 @@
+"""Structured offline Watch management CLI, shared by the root command."""
+from __future__ import annotations
+
+import argparse
+import json
+import sqlite3
+import sys
+from dataclasses import asdict
+from pathlib import Path
+
+from msalt.storage import Storage
+from msalt.watch.store import WatchStore
+
+DEFAULT_DB = str(Path.home() / ".nanobot" / "workspace" / "msalt.db")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="my-nanobot-rpi watch")
+    parser.add_argument("--json", action="store_true", help="structured JSON output")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for command in ("add", "list", "show", "update", "pause", "resume", "delete"):
+        child = sub.add_parser(command)
+        child.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        if command == "list":
+            child.add_argument("--all", action="store_true", help="include deleted conditions")
+        elif command == "add":
+            child.add_argument("name")
+            child.add_argument("--description", required=True)
+            child.add_argument("--keywords-json", required=True)
+            child.add_argument("--excluded-json", required=True)
+        else:
+            child.add_argument("id", type=int)
+            if command != "show":
+                child.add_argument("--expected-revision", type=int, required=True)
+            if command == "update":
+                child.add_argument("--name")
+                child.add_argument("--description")
+                child.add_argument("--keywords-json")
+                child.add_argument("--excluded-json")
+            if command == "delete":
+                child.add_argument("--confirm", action="store_true")
+    return parser
+
+
+def _keywords(raw: str):
+    try:
+        return json.loads(raw)
+    except (ValueError, RecursionError):
+        raise ValueError("Keyword JSON must be a list of strings") from None
+
+
+def _emit(data, *, structured: bool) -> None:
+    if structured:
+        print(json.dumps(data, ensure_ascii=False))
+    elif isinstance(data, dict) and "error" in data:
+        print(data["error"], file=sys.stderr)
+    else:
+        rows = data if isinstance(data, list) else [data]
+        if not rows:
+            print("No Watch conditions")
+        for item in rows:
+            state = "deleted" if item["deleted_at"] else "active" if item["active"] else "paused"
+            print(f"{item['id']} revision={item['revision']} {state}: {item['name']}")
+            print(item["description"])
+            print("keywords=" + json.dumps(item["keywords"], ensure_ascii=False))
+            print("excluded=" + json.dumps(item["excluded_keywords"], ensure_ascii=False))
+
+
+def run_command(argv: list[str], *, db_path: str | None = None) -> int:
+    try:
+        args = build_parser().parse_args(argv)
+    except SystemExit as exc:
+        return int(exc.code)
+    storage = Storage(db_path if db_path is not None else DEFAULT_DB)
+    try:
+        storage.initialize()
+    except (sqlite3.Error, OSError, ValueError):
+        _emit({"error": "Watch database initialization failed"}, structured=args.json)
+        return 1
+    store = WatchStore(storage)
+    try:
+        if args.command == "add":
+            result = store.add(args.name, description=args.description,
+                               keywords=_keywords(args.keywords_json),
+                               excluded_keywords=_keywords(args.excluded_json))
+        elif args.command == "list":
+            result = store.list(include_deleted=args.all)
+        elif args.command == "show":
+            result = store.show(args.id)
+        elif args.command == "update":
+            changes = {}
+            for field in ("name", "description"):
+                if getattr(args, field) is not None:
+                    changes[field] = getattr(args, field)
+            for flag, field in (("keywords_json", "keywords"), ("excluded_json", "excluded_keywords")):
+                if getattr(args, flag) is not None:
+                    changes[field] = _keywords(getattr(args, flag))
+            if not changes:
+                raise ValueError("Update requires at least one condition field")
+            result = store.update(args.id, expected_revision=args.expected_revision, **changes)
+        else:
+            if args.command == "delete" and not args.confirm:
+                raise ValueError("Delete requires user confirmation and --confirm")
+            result = getattr(store, args.command)(args.id, expected_revision=args.expected_revision)
+        data = [asdict(item) for item in result] if isinstance(result, list) else asdict(result)
+        _emit(data, structured=args.json)
+        return 0
+    except ValueError as exc:
+        _emit({"error": str(exc)}, structured=args.json)
+        return 2
+    except (sqlite3.Error, OSError):
+        _emit({"error": "Watch database operation failed"}, structured=args.json)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_command(sys.argv[1:]))

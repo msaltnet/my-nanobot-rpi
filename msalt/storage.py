@@ -71,6 +71,8 @@ class Storage:
             migrate(conn)
             from msalt.tracking.delivery_schema import migrate as migrate_tracking
             migrate_tracking(conn)
+            from msalt.watch.schema import migrate as migrate_watch
+            migrate_watch(conn)
             cols = {row[1] for row in conn.execute("PRAGMA table_info(tracked_items)")}
             if "last_missed_asked_date" not in cols:
                 conn.execute(

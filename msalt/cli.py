@@ -392,5 +392,16 @@ def tracking(ctx: typer.Context) -> None:
     raise typer.Exit(code=run_command(ctx.args))
 
 
+@app.command(
+    "watch",
+    help="Watch conditions add/list/show/update/pause/resume/delete.",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def watch(ctx: typer.Context) -> None:
+    _load_dotenv()
+    from msalt.watch.cli import run_command
+    raise typer.Exit(code=run_command(ctx.args))
+
+
 if __name__ == "__main__":
     app()
