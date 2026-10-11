@@ -68,3 +68,6 @@ def migrate(conn: sqlite3.Connection) -> None:
         )
     """)
     conn.execute('CREATE INDEX IF NOT EXISTS idx_watch_evaluation_status ON watch_evaluations(status,article_id)')
+
+    from msalt.watch.notification_store import migrate_notifications
+    migrate_notifications(conn)
