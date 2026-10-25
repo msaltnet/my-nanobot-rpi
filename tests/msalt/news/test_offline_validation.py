@@ -224,7 +224,9 @@ def test_mock_llm_failure_falls_back_without_marking_plain_output(storage, offli
     storage.insert_article(**item)
     text = briefing.BriefingGenerator(storage).format_briefing("evening")
     assert f"   원문: {item['url']}" in text
-    assert item["title"] in text
+    assert item["title"] not in text
+    assert item["summary"] not in text
+    assert "한국어 요약을 생성하지 못했습니다" in text
     llm.chat.completions.create.assert_called_once()
     assert Storage(storage.db_path).get_briefed_article_urls([item["url"]]) == set()
 

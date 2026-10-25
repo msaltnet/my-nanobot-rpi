@@ -25,7 +25,10 @@ def test_format_briefing_plain_mode(mock_storage):
     assert "국내" in text
     assert "해외" in text
     assert "경제 성장률 상승" in text
-    assert "Fed holds rates" in text
+    assert "Fed holds rates" not in text
+    assert "Federal Reserve holds interest rates" not in text
+    assert "한국어 요약을 생성하지 못했습니다" in text
+    assert "https://reuters.com/1" in text
 
 
 def test_format_briefing_afternoon_uses_lunch_label(mock_storage):
@@ -45,7 +48,9 @@ def test_format_briefing_includes_policy_section():
     text = gen.format_briefing("morning")
     assert "[정책·지표]" in text
     assert "Fed Monetary Policy" in text
-    assert "FOMC statement" in text
+    assert "FOMC statement" not in text
+    assert "Rate held at 4.25%" not in text
+    assert "한국어 요약을 생성하지 못했습니다" in text
 
 
 def test_format_briefing_empty(mock_storage):
@@ -193,3 +198,71 @@ def test_llm_prompt_includes_published_at(mock_openai_cls, mock_storage):
     )
     assert "2026-04-12 06:30:00" in all_user_content  # 한경 (domestic)
     assert "2026-04-12 05:45:00" in all_user_content  # Reuters (international)
+
+
+@pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("API down")])
+@patch("openai.OpenAI")
+def test_english_fallback_hides_untranslated_content(mock_openai_cls, mock_storage, response):
+    client = mock_openai_cls.return_value
+    if isinstance(response, Exception):
+        client.chat.completions.create.side_effect = response
+    else:
+        client.chat.completions.create.return_value = _fake_openai_response(response)
+    reserved = []
+    gen = BriefingGenerator(mock_storage, before_summary=lambda: reserved.append(True))
+    articles = mock_storage.get_articles_since.return_value
+    result = gen.render_articles(articles)
+    assert "Fed holds rates" not in result.text
+    assert "Federal Reserve holds interest rates" not in result.text
+    assert "한국어 요약을 생성하지 못했습니다" in result.text
+    assert "경제 성장률 상승" in result.text
+    assert "2분기 성장률 전망" in result.text
+    assert result.urls == ("https://hk.com/1", "https://reuters.com/1")
+    assert "https://reuters.com/1" in result.text
+    assert len(reserved) == 2
+    assert client.chat.completions.create.call_count == 2
+    assert mock_openai_cls.call_args.kwargs["max_retries"] == 0
+
+
+@pytest.mark.parametrize("title,summary,visible,hidden", [
+    ("한국 금리 동결", "Federal Reserve holds interest rates", "한국 금리 동결", "Federal Reserve holds interest rates"),
+    ("Fed holds rates", "금리는 4.25%로 유지됐다", "금리는 4.25%로 유지됐다", "Fed holds rates"),
+    ("해외 Fed holds rates", "한국 경제 회복", "한국 경제 회복", "해외 Fed holds rates"),
+    ("AI 투자 4.25% 증가", "성장률 2% 전망", "AI 투자 4.25% 증가", None),
+    ("FED HOLDS RATES", "RATE HELD", None, "FED HOLDS RATES"),
+    ("iPhone 판매 증가", "OpenAI 투자 확대", "iPhone 판매 증가", None),
+    ("한국 금리 동결", "금리 소식 RATE 4.25% HELD", "한국 금리 동결", "금리 소식 RATE 4.25% HELD"),
+    ("해외 FED HOLDS RATES", "한국 경제 회복", "한국 경제 회복", "해외 FED HOLDS RATES"),
+    ("한국 금리 동결", "금리 소식 RATE HELD AT 4.25%", "한국 금리 동결", "금리 소식 RATE HELD AT 4.25%"),
+])
+def test_plain_mode_handles_each_language_field(mock_storage, title, summary, visible, hidden):
+    article = dict(mock_storage.get_articles_since.return_value[1], title=title, summary=summary)
+    result = BriefingGenerator(mock_storage, use_llm=False).render_articles([article])
+    if visible:
+        assert visible in result.text
+    if summary == "OpenAI 투자 확대":
+        assert summary in result.text
+    if hidden:
+        assert hidden not in result.text
+        assert "한국어 요약을 생성하지 못했습니다" in result.text
+    assert result.urls == ("https://reuters.com/1",)
+    assert "원문: https://reuters.com/1" in result.text
+
+
+@patch("openai.OpenAI")
+def test_english_news_requests_korean_translation_in_same_call(mock_openai_cls, mock_storage):
+    article = dict(mock_storage.get_articles_since.return_value[1], summary="Rate held at 4.25%")
+    client = mock_openai_cls.return_value
+    client.chat.completions.create.return_value = _fake_openai_response("미 연준이 금리를 4.25%로 동결했다. [1]")
+    result = BriefingGenerator(mock_storage).render_articles([article])
+    assert "미 연준이 금리를 4.25%로 동결했다. [1]" in result.text
+    assert "주요 출처:" in result.text
+    assert "https://reuters.com/1" in result.text
+    assert "한국어 요약을 생성하지 못했습니다" not in result.text
+    assert result.urls == ("https://reuters.com/1",)
+    client.chat.completions.create.assert_called_once()
+    messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert "한국어로 번역" in messages[0]["content"]
+    assert "수치" in messages[0]["content"]
+    assert "Fed holds rates" in messages[1]["content"]
+    assert "4.25%" in messages[1]["content"]
