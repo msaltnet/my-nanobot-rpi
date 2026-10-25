@@ -230,6 +230,8 @@ def test_english_fallback_hides_untranslated_content(mock_openai_cls, mock_stora
     ("해외 Fed holds rates", "한국 경제 회복", "한국 경제 회복", "해외 Fed holds rates"),
     ("AI 투자 4.25% 증가", "성장률 2% 전망", "AI 투자 4.25% 증가", None),
     ("FED HOLDS RATES", "RATE HELD", None, "FED HOLDS RATES"),
+    ("해외 FED HOLDS RATES", "한국 경제 회복", "한국 경제 회복", "해외 FED HOLDS RATES"),
+    ("한국 금리 동결", "금리 소식 RATE HELD AT 4.25%", "한국 금리 동결", "금리 소식 RATE HELD AT 4.25%"),
 ])
 def test_plain_mode_handles_each_language_field(mock_storage, title, summary, visible, hidden):
     article = dict(mock_storage.get_articles_since.return_value[1], title=title, summary=summary)

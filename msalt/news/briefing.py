@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -235,11 +236,14 @@ def _plain_korean_text(text: str) -> str:
     """Conservative fallback display rule, not a language detector or translator.
 
     Keep Hangul text (including uppercase abbreviations and numbers). Hide
-    fields containing lowercase Latin text, even mixed proper names, rather
+    fields containing lowercase Latin text or consecutive uppercase words,
+    even mixed proper names, rather
     than accidentally displaying untranslated English prose after LLM failure.
     """
-    if any("가" <= char <= "힣" for char in text) and not any(
-        "a" <= char <= "z" for char in text
+    if (
+        any("가" <= char <= "힣" for char in text)
+        and not any("a" <= char <= "z" for char in text)
+        and not re.search(r"[A-Z]+\s+[A-Z]+", text)
     ):
         return text
     return ""
