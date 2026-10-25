@@ -233,17 +233,17 @@ def _format_plain(articles: list[dict]) -> str:
 
 
 def _plain_korean_text(text: str) -> str:
-    """Conservative fallback display rule, not a language detector or translator.
+    """Display Hangul fallback with isolated Latin names, not English phrases.
 
-    Keep Hangul text (including uppercase abbreviations and numbers). Hide
-    fields containing lowercase Latin text or consecutive uppercase words,
-    even mixed proper names, rather
-    than accidentally displaying untranslated English prose after LLM failure.
+    This is a conservative display rule, not a language detector. Multiple
+    Latin words between Hangul runs may be prose; hide that whole field.
+    Multiword foreign names can also be hidden when translation is unavailable.
     """
-    if (
-        any("가" <= char <= "힣" for char in text)
-        and not any("a" <= char <= "z" for char in text)
-        and not re.search(r"[A-Z]+\s+[A-Z]+", text)
+    if not re.search(r"[가-힣]", text):
+        return ""
+    if any(
+        len(re.findall(r"[A-Za-z]+", span)) > 1
+        for span in re.split(r"[가-힣]+", text)
     ):
-        return text
-    return ""
+        return ""
+    return text

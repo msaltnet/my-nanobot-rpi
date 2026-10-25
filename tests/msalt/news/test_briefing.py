@@ -230,6 +230,8 @@ def test_english_fallback_hides_untranslated_content(mock_openai_cls, mock_stora
     ("해외 Fed holds rates", "한국 경제 회복", "한국 경제 회복", "해외 Fed holds rates"),
     ("AI 투자 4.25% 증가", "성장률 2% 전망", "AI 투자 4.25% 증가", None),
     ("FED HOLDS RATES", "RATE HELD", None, "FED HOLDS RATES"),
+    ("iPhone 판매 증가", "OpenAI 투자 확대", "iPhone 판매 증가", None),
+    ("한국 금리 동결", "금리 소식 RATE 4.25% HELD", "한국 금리 동결", "금리 소식 RATE 4.25% HELD"),
     ("해외 FED HOLDS RATES", "한국 경제 회복", "한국 경제 회복", "해외 FED HOLDS RATES"),
     ("한국 금리 동결", "금리 소식 RATE HELD AT 4.25%", "한국 금리 동결", "금리 소식 RATE HELD AT 4.25%"),
 ])
@@ -238,6 +240,8 @@ def test_plain_mode_handles_each_language_field(mock_storage, title, summary, vi
     result = BriefingGenerator(mock_storage, use_llm=False).render_articles([article])
     if visible:
         assert visible in result.text
+    if summary == "OpenAI 투자 확대":
+        assert summary in result.text
     if hidden:
         assert hidden not in result.text
         assert "한국어 요약을 생성하지 못했습니다" in result.text
