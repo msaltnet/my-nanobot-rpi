@@ -29,12 +29,14 @@ BRIEFING_LABELS = {
 SYSTEM_PROMPT = (
     "당신은 한국어 경제 뉴스 편집자다. 주어진 기사 목록을 읽고 "
     "카테고리의 핵심 흐름을 요약한다.\n"
+    "영어를 포함한 외국어 기사 제목·요약은 한국어로 번역하여 요약한다. "
+    "출력 문장은 한국어로 작성하고 수치·단위·고유명사의 의미를 보존한다.\n"
     "규칙:\n"
     "- 총 5문장 이내. 더 쓰지 말 것.\n"
     "- 사실만, 추측 금지.\n"
     "- 중복되는 헤드라인은 하나로 합친다.\n"
     "- 한 문장에 하나의 주제만. 여러 주제를 접속사로 이어 붙이지 말 것.\n"
-    "- 숫자·고유명사는 원문 그대로.\n"
+    "- 수치·단위는 원문 그대로 유지하고, 고유명사·약어는 의미를 보존한다.\n"
     "- 서론·맺음말 없이 본론만.\n"
     "- 각 문장 끝에 근거 기사 번호를 [1], [1,3] 형태로 표기."
 )
@@ -217,8 +219,27 @@ def _format_sources(articles: list[dict]) -> str:
 def _format_plain(articles: list[dict]) -> str:
     lines = []
     for i, a in enumerate(articles, 1):
-        lines.append(f"{i}. [{a.get('source', '')}] {a['title']}")
-        if a.get("summary"):
-            lines.append(f"   {a['summary'][:200]}")
+        title = _plain_korean_text(a["title"])
+        summary = _plain_korean_text(a.get("summary") or "")
+        notice = "한국어 요약을 생성하지 못했습니다. 원문 링크를 확인해 주세요."
+        lines.append(f"{i}. [{a.get('source', '')}] {title or notice}")
+        if summary:
+            lines.append(f"   {summary[:200]}")
+        elif a.get("summary") and title:
+            lines.append(f"   {notice}")
         lines.append(f"   원문: {a['url']}")
     return "\n".join(lines)
+
+
+def _plain_korean_text(text: str) -> str:
+    """Conservative fallback display rule, not a language detector or translator.
+
+    Keep Hangul text (including uppercase abbreviations and numbers). Hide
+    fields containing lowercase Latin text, even mixed proper names, rather
+    than accidentally displaying untranslated English prose after LLM failure.
+    """
+    if any("가" <= char <= "힣" for char in text) and not any(
+        "a" <= char <= "z" for char in text
+    ):
+        return text
+    return ""
