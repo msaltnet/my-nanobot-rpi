@@ -462,10 +462,63 @@ def test_real_workers_last_day_slot_do_not_exceed_quota(setup):
         result = send(api(storage), post, NOW + timedelta(hours=hour))
         return result, post.payloads
 
+    # Both workers compete for the same final slot. Different diagnostic hours
+    # test expiry/cancellation instead and can legitimately result in zero POSTs.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(worker, [5, 6]))
+        results = list(pool.map(worker, [5, 5]))
     assert sum(len(p) for _, p in results) == 1
+    deliveries = store.status()["deliveries"]
+    assert len(deliveries) == 6
+    slot = (NOW + timedelta(hours=5)).replace(minute=0, second=0, microsecond=0).isoformat()
+    final = [row for row in deliveries if row["slot_utc"] == slot]
+    assert len(final) == 1
+    receipt = store.show(final[0]["delivery_id"])
+    assert receipt["state"] == "sent"
+    assert len(receipt["attempts"]) == 1
+    assert receipt["attempts"][0]["state"] == "sent"
+
+
+def test_last_day_pending_expiry_keeps_quota_and_url_attempts(setup):
+    from msalt.watch.sender import NotificationSender
+
+    storage, _, _ = setup
+    candidates(storage, 10)
+    store = api(storage)
+    store.set_enabled(True, confirm=True)
+    for hour in range(5):
+        send(store, Post((400, {"ok": False})), NOW + timedelta(hours=hour))
+    old_now, later_now = NOW + timedelta(hours=5), NOW + timedelta(hours=6)
+    pending = store.prepare(TARGET, now=old_now)
+    assert pending["state"] == "pending"
+    identifier = pending["delivery_id"]
+    with storage._connect() as conn:
+        before = conn.execute(
+            "SELECT url,attempts FROM watch_notification_urls WHERE delivery_id=?",
+            (identifier,),
+        ).fetchall()
+    assert len(before) == 3
+    assert all(row["attempts"] == 1 for row in before)
+
+    # Deterministically expire the sixth reservation before its sender fences.
+    # Cancellation releases URL claims but never refunds the day's quota.
+    assert api(storage).prepare(TARGET, now=later_now)["state"] == "limited"
+    post = Post()
+    assert asyncio.run(
+        NotificationSender(store, post=post).send(identifier, now=old_now)
+    ) == "cancelled"
+    cancelled = store.show(identifier)
+    assert cancelled["error_code"] == "slot_expired"
+    assert cancelled["attempts"] == []
     assert len(store.status()["deliveries"]) == 6
+    assert send(api(storage), post, later_now)["state"] == "limited"
+    assert post.payloads == []
+    with storage._connect() as conn:
+        for row in before:
+            after = conn.execute(
+                "SELECT state,attempts,delivery_id FROM watch_notification_urls WHERE url=?",
+                (row["url"],),
+            ).fetchone()
+            assert tuple(after) == ("available", row["attempts"], None)
 
 
 def test_utc_date_change_does_not_reset_kst_day_quota(setup):
